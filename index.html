@@ -1,9 +1,10 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.00.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.01.0';
  ---------------------------------------------------------------------
  【変更履歴】
+ 2026-09-10 Ver1.01.0 テキストのフォント拡大・縮小機能の追加。
  2026-09-10 Ver1.00.0 初回コミット
  --------------------------------------------------------------------- -->
 <!DOCTYPE html>
@@ -19,7 +20,7 @@
         <div class="header">
             <h1 class="app-title">
                 <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
-                xVoice -テキスト音声読み上げ- Ver1.00.0
+                xVoice -テキスト音声読み上げ- Ver1.01.0
             </h1>
             <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替">☀️</button>
         </div>
@@ -36,11 +37,14 @@
         <div class="field">
             <!-- <label>テキストファイル読み込み:</label> -->
             <div class="file-input-group">
-                <label for="file-input" class="file-select-btn">
-                    📁 ファイルを選択する
-                </label>
-                <input type="file" id="file-input" accept=".txt" hidden>
-                <div id="file-path-display" class="file-path-display">選択されていません</div>
+                <button id="btn-file-select" class="btn-primary">📁 ファイル選択</button>
+                <span id="file-path-display" class="file-path-display">選択されていません</span>
+                <select id="font-size-select" title="文字サイズ変更">
+                    <option value="12px">小</option>
+                    <option value="16px" selected>中</option>
+                    <option value="20px">大</option>
+                    <option value="24px">特大</option>
+                </select>
                 <button id="btn-speak" class="btn-primary">▶️ 再生</button>
                 <button id="btn-stop" class="btn-secondary" disabled>⏹️ 停止</button>
                 <button id="btn-save" class="btn-secondary">💾 保存</button>

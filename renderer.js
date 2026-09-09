@@ -1,23 +1,22 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.00.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.01.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const btnTheme = document.getElementById('btn-theme');
     const speakerSelect = document.getElementById('speaker');
     const btnRestart = document.getElementById('btn-restart');
-    const fileInput = document.getElementById('file-input');
+    const btnFileSelect = document.getElementById('btn-file-select');
     const filePathDisplay = document.getElementById('file-path-display');
     const textInput = document.getElementById('text');
+    const fontSizeSelect = document.getElementById('font-size-select');
     const btnFileClear = document.getElementById('btn-file-clear');
     const btnSpeak = document.getElementById('btn-speak');
     const btnStop = document.getElementById('btn-stop');
     const btnSave = document.getElementById('btn-save');
     const audioPlayer = document.getElementById('audio-player');
     const statusDiv = document.getElementById('status');
-    
-    // プログレスバー要素の取得
     const engineProgressBar = document.getElementById('engine-progress');
     const textProgressBar = document.getElementById('text-progress');
     const mp3ProgressBar = document.getElementById('mp3-progress');
@@ -26,10 +25,95 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let isPlaying = false;
     let isStopped = false;
-    let currentLineIndex = 0; // 再開位置を保持する行インデックス
-    let previousText = '';     // テキスト内容の変更検知用
+    let isLineJumped = false;  // 再生中の行ジャンプ用フラグ
+    let currentLineIndex = 0;  // 再開位置を保持する行インデックス
+    let previousText = '';      // テキスト内容の変更検知用
+    let isFirstPlay = true;     // 起動後/読み込み後の初回再生判定フラグ
 
-    if (audioPlayer) audioPlayer.volume = 0.2;
+    // --- localStorage保存・復元用キー定数 ---
+    const STORAGE_KEYS = {
+        FILE_PATH: 'xVoice_filePath',
+        TEXT: 'xVoice_text',
+        LINE_INDEX: 'xVoice_lineIndex',
+        VOLUME: 'xVoice_volume',
+        FONT_SIZE: 'xVoice_fontSize',
+        SPEAKER: 'xVoice_speaker'
+    };
+
+    // --- 設定の復元ロジック ---
+    if (audioPlayer) {
+        const savedVolume = localStorage.getItem(STORAGE_KEYS.VOLUME);
+        audioPlayer.volume = savedVolume !== null ? parseFloat(savedVolume) : 0.2;
+
+        audioPlayer.addEventListener('volumechange', () => {
+            localStorage.setItem(STORAGE_KEYS.VOLUME, audioPlayer.volume);
+        });
+    }
+
+    const savedFilePath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
+    if (savedFilePath) {
+        filePathDisplay.textContent = savedFilePath;
+    }
+
+    const savedText = localStorage.getItem(STORAGE_KEYS.TEXT);
+    if (savedText !== null) {
+        const normalizedSavedText = savedText.replace(/\r\n/g, '\n');
+        textInput.value = normalizedSavedText;
+        previousText = normalizedSavedText;
+    }
+
+    const savedLineIndex = localStorage.getItem(STORAGE_KEYS.LINE_INDEX);
+    if (savedLineIndex !== null) {
+        currentLineIndex = parseInt(savedLineIndex, 10) || 0;
+    }
+
+    // --- 話者モデルの選択変更リスナー ---
+    speakerSelect?.addEventListener('change', (e) => {
+        localStorage.setItem(STORAGE_KEYS.SPEAKER, e.target.value);
+    });
+
+    // --- フォントサイズの適用・変更処理 ---
+    function applyFontSize(size) {
+        if (!textInput) return;
+
+        // 1. 変更前の状態（スクロール位置・選択範囲・行高）を取得
+        const oldLineHeight = parseFloat(window.getComputedStyle(textInput).lineHeight) || 20;
+        const oldScrollTop = textInput.scrollTop;
+        
+        // 再生中のハイライト保持用に選択範囲を退避
+        const start = textInput.selectionStart;
+        const end = textInput.selectionEnd;
+
+        // 2. フォントサイズの設定・反映
+        textInput.style.fontSize = size;
+        if (filePathDisplay) filePathDisplay.style.fontSize = size;
+        if (fontSizeSelect) fontSizeSelect.value = size;
+        localStorage.setItem(STORAGE_KEYS.FONT_SIZE, size);
+
+        // 3. 変更後の行高を取得し、スクロール位置を比率計算で調整
+        const newLineHeight = parseFloat(window.getComputedStyle(textInput).lineHeight) || 20;
+        if (oldLineHeight > 0) {
+            const ratio = newLineHeight / oldLineHeight;
+            textInput.scrollTop = oldScrollTop * ratio;
+        }
+
+        // 4. 再生中の場合はフォーカスを再取得し、描画フレーム同期後にハイライトを復元
+        if (isPlaying && start !== null && end !== null) {
+            requestAnimationFrame(() => {
+                textInput.focus();
+                textInput.setSelectionRange(start, end);
+            });
+        }
+    }
+
+    // 保存されているフォントサイズを復元（デフォルト: 16px）
+    const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
+    applyFontSize(savedFontSize);
+
+    // 選択バー変更時のイベントリスナー
+    fontSizeSelect?.addEventListener('change', (e) => {
+        applyFontSize(e.target.value);
+    });
 
     // --- 進捗バー表示切り替えヘルパー ---
     function showProgressBar(type) {
@@ -51,45 +135,103 @@ document.addEventListener('DOMContentLoaded', async () => {
         setTheme(currentTheme === 'dark' ? 'light' : 'dark');
     });
 
-    // --- ファイル選択 ---
-    fileInput?.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) {
-            filePathDisplay.textContent = '選択されていません';
-            return;
-        }
-        filePathDisplay.textContent = file.path || file.name;
+    // --- 現在のカーソル位置から行インデックスを取得する関数 ---
+    function getCursorLineIndex() {
+        if (!textInput) return 0;
+        const fullText = textInput.value.replace(/\r\n/g, '\n');
+        const cursorPos = textInput.selectionStart;
+        const textUpToCursor = fullText.substring(0, cursorPos);
+        return (textUpToCursor.match(/\n/g) || []).length;
+    }
 
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            textInput.value = evt.target.result;
-            if (btnSave) btnSave.disabled = !textInput.value.trim();
-        };
-        reader.readAsText(file);
+    // --- 再生中のカーソル移動（クリック／キー操作）の監視 ---
+    function handleCursorChange() {
+        if (!isPlaying) return;
+
+        const targetLineIndex = getCursorLineIndex();
+        if (targetLineIndex !== currentLineIndex) {
+            currentLineIndex = targetLineIndex;
+            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
+            
+            isLineJumped = true;
+            if (audioPlayer) {
+                audioPlayer.pause();
+                audioPlayer.currentTime = 0;
+            }
+        }
+    }
+
+    textInput?.addEventListener('click', handleCursorChange);
+    textInput?.addEventListener('keyup', (e) => {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
+            handleCursorChange();
+        }
+    });
+
+    // --- ファイル選択 ---
+    btnFileSelect?.addEventListener('click', async () => {
+        const fileData = await window.api.selectFile();
+        if (!fileData) return; // キャンセル時
+
+        const path = fileData.path;
+        const loadedText = (fileData.content || '').replace(/\r\n/g, '\n');
+
+        filePathDisplay.textContent = path;
+        localStorage.setItem(STORAGE_KEYS.FILE_PATH, path);
+
+        textInput.value = loadedText;
+        previousText = loadedText;
+        currentLineIndex = 0;
+        isFirstPlay = true;
+
+        localStorage.setItem(STORAGE_KEYS.TEXT, loadedText);
+        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+
+        if (btnSave) btnSave.disabled = !textInput.value.trim();
     });
 
     // クリアボタンのクリックイベント
     btnFileClear?.addEventListener('click', () => {
-        if (fileInput) fileInput.value = '';
-        if (filePathDisplay) filePathDisplay.textContent = '選択されていません';
+        filePathDisplay.textContent = '選択されていません';
         if (textInput) textInput.value = '';
         if (btnSave) btnSave.disabled = true;
+
+        currentLineIndex = 0;
+        previousText = '';
+        isFirstPlay = true;
+
+        localStorage.removeItem(STORAGE_KEYS.FILE_PATH);
+        localStorage.removeItem(STORAGE_KEYS.TEXT);
+        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
     });
 
-    // --- ボタンの状態管理 ---
+    // --- ボタンおよび入力要素の状態管理 ---
     function updateButtonStates(playing) {
         isPlaying = playing;
         btnSpeak.disabled = playing;
         btnStop.disabled = !playing;
         if (btnSave) btnSave.disabled = playing;
+        if (btnFileClear) btnFileClear.disabled = playing;
+    
+        // 再生中の無効化制御
+        if (btnFileSelect) btnFileSelect.disabled = playing;
+        if (fontSizeSelect) fontSizeSelect.disabled = playing;
+        if (textInput) textInput.readOnly = playing;
     }
 
-    // テキスト編集時は再生位置を先頭（0行目）にリセット
+    // テキスト編集時
     textInput?.addEventListener('input', () => {
-        if (btnSave) btnSave.disabled = !textInput.value.trim();
-        if (textInput.value !== previousText) {
+        const currentText = textInput.value.replace(/\r\n/g, '\n');
+        if (btnSave) btnSave.disabled = !currentText.trim();
+        
+        if (currentText !== previousText) {
             currentLineIndex = 0;
+            previousText = currentText;
+            isFirstPlay = true;
+            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
         }
+
+        localStorage.setItem(STORAGE_KEYS.TEXT, currentText);
     });
 
     // --- 話者一覧取得 ---
@@ -108,6 +250,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                     speakerSelect.appendChild(opt);
                 });
             });
+
+            // 保存されている話者モデル（ID）を復元
+            const savedSpeaker = localStorage.getItem(STORAGE_KEYS.SPEAKER);
+            if (savedSpeaker) {
+                const exists = Array.from(speakerSelect.options).some(opt => opt.value === String(savedSpeaker));
+                if (exists) {
+                    speakerSelect.value = savedSpeaker;
+                }
+            }
+
             statusDiv.textContent = '準備完了';
             return true;
         } catch (err) {
@@ -189,8 +341,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!isPlaying) return;
 
         isStopped = true;
-        audioPlayer.pause();
-        audioPlayer.currentTime = 0;
+        if (audioPlayer) {
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+        }
 
         statusDiv.textContent = `停止しました (${currentLineIndex + 1} 行目で停止中)`;
         updateButtonStates(false);
@@ -198,78 +352,97 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- 1. 「1行毎に合成・再生（ハイライト＋自動スクロール付き）」処理 ---
     async function playLineByLine() {
-        const fullText = textInput.value;
+        const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.split('\n');
-        const speakerId = speakerSelect.value;
-
+    
         if (!fullText.trim()) return alert('テキストを入力してください');
-
-        if (fullText !== previousText) {
+    
+        const normalizedPreviousText = previousText.replace(/\r\n/g, '\n');
+    
+        if (normalizedPreviousText !== '' && fullText !== normalizedPreviousText) {
             currentLineIndex = 0;
-            previousText = fullText;
+            isFirstPlay = true;
+            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+        } else if (!isFirstPlay) {
+            currentLineIndex = getCursorLineIndex();
+            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
         }
-
+    
+        previousText = fullText;
+        isFirstPlay = false;
+    
         if (currentLineIndex >= lines.length) {
             currentLineIndex = 0;
+            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
         }
-
+    
         updateButtonStates(true);
         isStopped = false;
-
-        // 再生進捗バーの表示
+        isLineJumped = false;
+    
         showProgressBar('text');
         if (textProgressBar) {
             textProgressBar.value = Math.round((currentLineIndex / lines.length) * 100);
         }
-
+    
         const computedStyle = window.getComputedStyle(textInput);
         const parsedLineHeight = parseFloat(computedStyle.lineHeight);
         const lineHeight = isNaN(parsedLineHeight) ? 20 : parsedLineHeight;
-
-        for (let i = currentLineIndex; i < lines.length; i++) {
+    
+        while (currentLineIndex < lines.length) {
             if (isStopped) break;
-
-            currentLineIndex = i;
-
-            // 進捗バーの割合(%)を更新（再生中行の進捗率）
+    
+            const i = currentLineIndex;
+            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, i);
+    
+            // ★ 毎行の処理開始時に最新の選択話者IDを取得
+            const currentSpeakerId = speakerSelect.value;
+    
             const progressPercent = Math.round(((i + 1) / lines.length) * 100);
             if (textProgressBar) {
                 textProgressBar.value = progressPercent;
             }
-
+    
             const lineText = lines[i];
             const lineTrimmed = lineText.trim();
             const lineLength = lineText.length;
-
+    
             let charOffset = 0;
             for (let k = 0; k < i; k++) {
                 charOffset += lines[k].length + 1;
             }
-
+    
             if (lineTrimmed.length > 0) {
                 statusDiv.textContent = `再生中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
-
+    
                 textInput.focus();
                 textInput.setSelectionRange(charOffset, charOffset + lineLength);
-
+    
                 const targetScrollTop = (i * lineHeight) - (textInput.clientHeight / 2) + lineHeight;
                 textInput.scrollTop = Math.max(0, targetScrollTop);
-
+    
                 try {
-                    const audioData = await fetchAudioBuffer(lineTrimmed, speakerId);
-                    if (isStopped) break;
-
+                    // ★ 取得した最新の currentSpeakerId を渡して音声合成を実行
+                    const audioData = await fetchAudioBuffer(lineTrimmed, currentSpeakerId);
+                    if (isStopped || isLineJumped) {
+                        if (isLineJumped) {
+                            isLineJumped = false;
+                            continue;
+                        }
+                        break;
+                    }
+    
                     const blob = new Blob([audioData], { type: 'audio/wav' });
                     audioPlayer.src = URL.createObjectURL(blob);
-
+    
                     await new Promise((resolve) => {
                         const checkStopped = setInterval(() => {
-                            if (isStopped) {
+                            if (isStopped || isLineJumped) {
                                 clearInterval(checkStopped);
                                 resolve();
                             }
                         }, 100);
-
+    
                         audioPlayer.onended = () => {
                             clearInterval(checkStopped);
                             resolve();
@@ -278,23 +451,31 @@ document.addEventListener('DOMContentLoaded', async () => {
                             clearInterval(checkStopped);
                             resolve();
                         };
-
+    
                         audioPlayer.play().catch(() => resolve());
                     });
-
+    
+                    if (isLineJumped) {
+                        isLineJumped = false;
+                        continue;
+                    }
+    
                 } catch (err) {
                     console.error(`行 ${i + 1} の処理でエラー:`, err);
                 }
             }
+    
+            currentLineIndex++;
         }
-
-        if (!isStopped) {
+    
+        if (!isStopped && !isLineJumped) {
             currentLineIndex = 0;
+            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
             textInput.setSelectionRange(fullText.length, fullText.length);
             statusDiv.textContent = '再生完了';
             if (textProgressBar) textProgressBar.value = 100;
         }
-
+    
         updateButtonStates(false);
     }
 
@@ -308,7 +489,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnSave.disabled = true;
         btnSpeak.disabled = true;
 
-        // MP3保存用進捗バー（黄色）の初期表示
         showProgressBar('mp3');
         if (mp3ProgressBar) mp3ProgressBar.value = 0;
 
@@ -318,7 +498,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             for (let i = 0; i < lines.length; i++) {
                 const progressPercent = Math.round(((i + 1) / lines.length) * 100);
                 
-                // ステータスと黄色の進捗バーを更新
                 statusDiv.textContent = `音声生成中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
                 if (mp3ProgressBar) mp3ProgressBar.value = progressPercent;
 
@@ -328,18 +507,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             statusDiv.textContent = 'MP3へ変換・保存中...';
 
-            // --- デフォルトファイル名の判定 ---
             let defaultFilename = 'xVoice生成.mp3';
             const selectedFile = fileInput?.files?.[0];
 
             if (selectedFile) {
-                // ファイル名から拡張子を取り除き、.mp3 を付与
                 const originalName = selectedFile.name;
                 const baseName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
                 defaultFilename = `${baseName}.mp3`;
             }
 
-            // メインプロセスへ音声データとデフォルトファイル名を渡す
             const success = await window.api.saveAudio(audioBuffers, defaultFilename);
             statusDiv.textContent = success ? '全文MP3保存が完了しました' : '保存がキャンセルまたは失敗しました';
 
@@ -350,7 +526,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnSave.disabled = false;
             btnSpeak.disabled = false;
 
-            // 完了またはエラー後に進捗バーをクリア（少し遅延させて完了を見せる）
             setTimeout(() => {
                 if (mp3ProgressBar) mp3ProgressBar.hidden = true;
             }, 1500);

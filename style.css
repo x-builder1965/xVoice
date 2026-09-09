@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.00.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.01.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -128,6 +128,11 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 0; /* フレックスアイテムの収縮崩れ防止 */
+}
+
+/* テキストエリアのマウスオーバー時のカーソルを指形状に変更 */
+#text {
+    cursor: pointer;
 }
 
 label {
@@ -318,4 +323,19 @@ textarea::-webkit-scrollbar-thumb:hover {
 textarea {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* フォントサイズ選択ドロップダウンの幅を短く設定 */
+#font-size-select {
+    width: 65px;         /* 幅をコンパクトに指定 */
+    padding: 2px 4px;    /* 内側の余白を調整 */
+    font-size: 14px;     /* セレクトボックス自体の文字サイズ */
+    box-sizing: border-box;
+}
+
+/* ボタンや入力要素が無効化（disabled）または読み取り専用（readOnly）時の共通スタイル */
+input[type="file"]:disabled {
+    opacity: 0.5;            /* 全体を50%透過して暗く（淡く）表示 */
+    cursor: not-allowed;     /* マウスカーソルを禁止マークに変更 */
+    filter: grayscale(30%);  /* 必要に応じて少し彩度を落とす */
 }

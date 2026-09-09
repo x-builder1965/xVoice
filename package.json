@@ -1,6 +1,6 @@
 {
   "name": "xvoice",
-  "version": "1.00.0",
+  "version": "1.01.0",
   "description": "AivisSpeech Text-to-Speech App",
   "main": "main.js",
   "author": "x-builder",

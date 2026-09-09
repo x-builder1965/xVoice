@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.00.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.01.0';
 // ---------------------------------------------------------------------
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
@@ -19,6 +19,8 @@ const ENGINE_EXE = 'run.exe';
 const AIVIS_HOST = 'http://127.0.0.1:10101';
 
 let mainWindow = null;
+// 本アプリ経由でエンジンを起動したかを管理するフラグ
+let isEngineSpawnedByApp = false;
 
 // --- Engineのヘルスチェック (起動完了待ち) ---
 function checkEngineHealth() {
@@ -36,6 +38,7 @@ async function startAivisEngine() {
     const isRunning = await checkEngineHealth();
     if (isRunning) {
         if (mainWindow) mainWindow.webContents.send('engine-progress-update', { current: 60, total: 60, isRunning: true });
+        // 既に外部等で起動済みの場合は自前起動フラグを立てない
         return true;
     }
 
@@ -46,9 +49,12 @@ async function startAivisEngine() {
         stdio: 'ignore'
     }).unref();
 
+    // 本アプリで起動したためフラグを有効化
+    isEngineSpawnedByApp = true;
+
     const maxTries = 60;
     for (let i = 1; i <= maxTries; i++) {
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 2000));
 
         // 進捗状況を画面に送出
         if (mainWindow) {
@@ -68,7 +74,10 @@ async function startAivisEngine() {
 // --- Engine停止処理 (taskkill) ---
 function stopAivisEngine() {
     return new Promise((resolve) => {
-        exec(`taskkill /F /IM ${ENGINE_EXE}`, () => resolve(true));
+        exec(`taskkill /F /IM ${ENGINE_EXE}`, () => {
+            isEngineSpawnedByApp = false; // 停止完了後にフラグをリセット
+            resolve(true);
+        });
     });
 }
 
@@ -108,6 +117,7 @@ ipcMain.handle('init-engine', async () => {
 
 // Engine再起動処理
 ipcMain.handle('restart-engine', async () => {
+    // 手動再起動時は一旦強制停止してから再起動（自前管理化する）
     await stopAivisEngine();
     await new Promise(r => setTimeout(r, 1000));
     return await startAivisEngine();
@@ -117,7 +127,7 @@ ipcMain.handle('restart-engine', async () => {
 ipcMain.handle('save-audio', async (event, arrayBufferArray, defaultFilename = 'xVoice生成.mp3') => {
     const { filePath } = await dialog.showSaveDialog({
         title: '全文MP3ファイルを保存',
-        defaultPath: defaultFilename || 'xVoice生成.mp3', // 受け取ったファイル名をセット
+        defaultPath: defaultFilename || 'xVoice生成.mp3',
         filters: [{ name: 'Audio', extensions: ['mp3'] }]
     });
 
@@ -166,13 +176,39 @@ ipcMain.handle('save-audio', async (event, arrayBufferArray, defaultFilename = '
 // --- アプリ初期化 ＆ 終了処理 ---
 app.whenReady().then(createWindow);
 
-// アプリ終了時に Engine を停止
+// アプリ終了処理
 app.on('will-quit', async (event) => {
-    event.preventDefault();
-    await stopAivisEngine();
-    process.exit(0);
+    // 本アプリによって起動された場合のみエンジンを終了
+    if (isEngineSpawnedByApp) {
+        event.preventDefault();
+        await stopAivisEngine();
+        process.exit(0);
+    }
 });
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
+});
+
+// --- ファイル選択ダイアログを表示するIPCハンドラー ---
+ipcMain.handle('select-file', async () => {
+    const result = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+            { name: 'テキストファイル', extensions: ['txt'] },
+            { name: 'すべてのファイル', extensions: ['*'] }
+        ]
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+        return null;
+    }
+
+    const filePath = result.filePaths[0];
+    const content = fs.readFileSync(filePath, 'utf-8');
+
+    return {
+        path: filePath,
+        content: content
+    };
 });
