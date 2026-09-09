@@ -1,0 +1,71 @@
+<!-- -- index.html ---------------------------------------------------
+ copyright = 'Copyright © 2026- @x-builder, Japan';
+ email     = 'x-builder@gmail.com';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.00.0';
+ ---------------------------------------------------------------------
+ 【変更履歴】
+ 2026-09-10 Ver1.00.0 初回コミット
+ --------------------------------------------------------------------- -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>xVoice - AivisSpeech Client</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="renderer.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="app-title">
+                <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
+                xVoice -テキスト音声読み上げ- Ver1.00.0
+            </h1>
+            <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替">☀️</button>
+        </div>
+        
+        <div class="field">
+            <!--  <label for="speaker">話者モデル選択:</label>-->
+            <div class="file-input-group">
+                <select id="speaker"><option value="">エンジン起動確認中...</option></select>
+                <button id="btn-restart" class="file-select-btn" type="button">🔄 再起動</button>
+            </div>
+        </div>
+
+        <!-- ファイル選択フィールド部分 -->
+        <div class="field">
+            <!-- <label>テキストファイル読み込み:</label> -->
+            <div class="file-input-group">
+                <label for="file-input" class="file-select-btn">
+                    📁 ファイルを選択する
+                </label>
+                <input type="file" id="file-input" accept=".txt" hidden>
+                <div id="file-path-display" class="file-path-display">選択されていません</div>
+                <button id="btn-speak" class="btn-primary">▶️ 再生</button>
+                <button id="btn-stop" class="btn-secondary" disabled>⏹️ 停止</button>
+                <button id="btn-save" class="btn-secondary">💾 保存</button>
+                <button id="btn-file-clear" class="file-select-btn" type="button">🗑️ クリア</button>
+            </div>
+        </div>
+
+        <div class="field field-text">
+            <!-- <label for="text">テキスト入力 / 内容確認:</label> -->
+            <textarea id="text" placeholder="テキストを入力するか、ファイルを読み込んでください..."></textarea>
+        </div>
+
+        <!-- ステータス・プログレスバー部分 -->
+        <div class="field">
+            <!-- エンジン起動進捗バー（赤） -->
+            <progress id="engine-progress" value="0" max="100" class="engine-progress" hidden></progress>
+            <!-- テキスト再生進捗バー（青） -->
+            <progress id="text-progress" value="0" max="100" class="text-progress" hidden></progress>
+            <!-- 全文MP3保存進捗バー（黄） -->
+            <progress id="mp3-progress" value="0" max="100" class="mp3-progress" hidden></progress>
+        </div>
+        <div class="status" id="status">AivisSpeech Engineに接続中...</div>
+
+        <!-- 再生プレイヤー -->
+        <audio id="audio-player" controls></audio>
+    </div>
+</body>
+</html>

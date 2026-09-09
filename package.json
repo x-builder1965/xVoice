@@ -1,0 +1,99 @@
+{
+  "name": "xvoice",
+  "version": "1.00.0",
+  "description": "AivisSpeech Text-to-Speech App",
+  "main": "main.js",
+  "author": "x-builder",
+  "license": "MIT",
+  "homepage": "https://github.com/x-builder1965/xVoice",
+  "scripts": {
+    "start": "chcp 65001 && electron .",
+    "build": "electron-builder --win",
+    "dist": "electron-builder --win --x64 --config.compression=maximum",
+    "dist:32": "electron-builder --win --ia32",
+    "dist:portable": "electron-builder --win --x64 --target portable",
+    "publish": "electron-builder --win --publish always",
+    "sign": "electron-builder --win --x64 --config.cscLink=authenticode.pfx --config.cscKeyPassword=%CSC_KEY_PASSWORD%"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0",
+    "fluent-ffmpeg": "^2.1.3"
+  },
+  "build": {
+    "appId": "com.xvoice.app",
+    "productName": "xVoice",
+    "copyright": "Copyright © 2026- x-builder",
+    "asar": true,
+    "asarUnpack": [
+      "**/ffmpeg-static/**",
+      "**/*.node"
+    ],
+    "compression": "maximum",
+    "directories": {
+      "output": "dist-win"
+    },
+    "files": [
+      "package.json",
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "style.css",
+      "index.html",
+      "xVoice.ico",
+      "xVoice.png",
+      "README.md"
+    ],
+    "win": {
+      "icon": "xVoice.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "verifyUpdateCodeSignature": true,
+      "forceCodeSigning": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "xVoice",
+      "menuCategory": "Multimedia",
+      "installerIcon": "xVoice.ico",
+      "uninstallerIcon": "xVoice.ico",
+      "installerHeaderIcon": "xVoice.ico",
+      "warningsAsErrors": false,
+      "installerLanguages": [
+        "ja_JP"
+      ]
+    },
+    "fileAssociations": [
+      {
+        "ext": "txt",
+        "name": "Text Document",
+        "description": "テキスト ファイル",
+        "mimeType": "text/plain",
+        "icon": "xVoice.ico",
+        "role": "Viewer"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "xvoice",
+        "schemes": [
+          "xvoice"
+        ]
+      }
+    ]
+  }
+}
