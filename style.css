@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.05.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.08.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -128,7 +128,7 @@ body {
 }
 
 #text {
-    cursor: pointer;
+    cursor: text;
 }
 
 label {

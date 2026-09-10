@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.07.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.08.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const btnTheme = document.getElementById('btn-theme');
@@ -440,6 +440,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 再生ボタンの表示と役割をトグル
         if (btnSpeak) {
             btnSpeak.textContent = playing ? '⏹️停止' : '▶️再生';
+            textInput.style.cursor = playing ? 'pointer' : 'text';
         }
 
         if (btnSave) btnSave.disabled = playing;
