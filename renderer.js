@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.09.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.10.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const btnTheme = document.getElementById('btn-theme');
@@ -462,7 +462,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         isSaving = false;
         isSaveCanceled = false;
         if (btnSave) {
-            btnSave.textContent = '💾 保存';
+            btnSave.textContent = '🔊 生成';
             btnSave.disabled = !isEngineReady || !textInput.value.trim();
         }
         btnSpeak.disabled = false;
@@ -575,7 +575,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (isRunning) {
                 isEngineReady = true;
                 statusDiv.textContent = 'AivisSpeech Engine の起動が完了しました';
-                // ★エンジン起動完了に伴いボタンが「💾 保存」であることを確認して活性化
+                // ★エンジン起動完了に伴いボタンが「🔊 生成」であることを確認して活性化
                 if (btnSave && !isSaving) {
                     btnSave.disabled = !textInput.value.trim();
                 }
@@ -590,7 +590,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- 音声生成ロジック ---
     async function fetchAudioBuffer(text, speakerId) {
-        const queryRes = await fetch(`${AIVIS_HOST}/audio_query?text=${encodeURIComponent(text)}&speaker=${speakerId}`, {
+        // 変換ルビの置換処理
+        // {元語句|読み} または ｛元語句｜読み｝ の形式に対応
+        const processedText = text.replace(/[｛{][^｜|]+[｜|]([^｝}]+)[｝}]/g, '$1');
+
+        const queryRes = await fetch(`${AIVIS_HOST}/audio_query?text=${encodeURIComponent(processedText)}&speaker=${speakerId}`, {
             method: 'POST'
         });
         const audioQuery = await queryRes.json();
@@ -839,7 +843,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // ★「💾 保存」 / 「❌ 中止」 クリック時の分岐処理
+    // ★「🔊 生成」 / 「❌ 中止」 クリック時の分岐処理
     btnSave?.addEventListener('click', () => {
         if (isSaving) {
             // 保存中にクリックされた場合はキャンセルフラグを立てる

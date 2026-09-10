@@ -1,9 +1,10 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.09.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.10.0';
  ---------------------------------------------------------------------
  【変更履歴】
+ 2026-09-10 Ver1.10.0 テキスト音声生成時の変換ルビの対応。
  2026-09-10 Ver1.09.0 「💾保存」の「❌中止」機能を追加。
  2026-09-10 Ver1.08.0 テキストにマウスオーバー時のマウス形状を改善。
  2026-09-10 Ver1.07.0 再生停止時のハイライト表示を改善。
@@ -28,7 +29,7 @@
         <div class="header">
             <h1 class="app-title">
                 <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
-                xVoice -テキスト音声読み上げ- Ver1.09.0
+                xVoice -テキスト音声読み上げ- Ver1.10.0
             </h1>
             <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替">☀️</button>
         </div>
@@ -56,7 +57,7 @@
                 <button id="btn-file-select" class="btn-primary">📁 ファイル選択</button>
                 <span id="file-path-display" class="file-path-display">選択されていません</span>
                 <button id="btn-speak" class="btn-primary">▶️ 再生</button>
-                <button id="btn-save" class="btn-secondary">💾 保存</button>
+                <button id="btn-save" class="btn-secondary">🔊 生成</button>
                 <button id="btn-file-clear" class="file-select-btn" type="button">🗑️ クリア</button>
             </div>
         </div>

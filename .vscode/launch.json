@@ -12,10 +12,7 @@
       },
       "args": [
         ".",                          // カレントディレクトリのアプリを起動
-        // "H:/Anime/Anime（放映中）/(4：木)_202607_★★★★☆_(TV)_片田舎のおっさん、剣聖になるⅡ",
-        // "H:/PlayList/NAS/手作り/Anime（再生履歴）.amppl",
-        // "H:/Docment/個人/画像/背景画像/ライブ壁紙 美少女12",
-        // "H:/Download/xPlayerSettings_20260906143350.xpj",
+        // "H:/Book/(一般小説)/(一般小説) ＠_小説家になろう/n9629ex：連載中_最弱テイマーはゴミ拾いの旅を始めました。/0616_５７２話　少し変わったね.txt",
         "--remote-debugging-port=9223" // Rendererアタッチ用ポート（必須）
       ],
       "console": "integratedTerminal",
