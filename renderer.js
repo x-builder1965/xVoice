@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.08.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.09.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const btnTheme = document.getElementById('btn-theme');
@@ -30,6 +30,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentLineIndex = 0;  // 再開位置を保持する行インデックス
     let previousText = '';      // テキスト内容の変更検知用
     let isFirstPlay = true;     // 起動後/読み込み後の初回再生判定フラグ
+    let isSaving = false;
+    let isSaveCanceled = false;
+    let isEngineReady = false; // エラー時の状態判定用
 
     // --- localStorage保存・復元用キー定数 ---
     const STORAGE_KEYS = {
@@ -437,25 +440,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     function updateButtonStates(playing) {
         isPlaying = playing;
         
-        // 再生ボタンの表示と役割をトグル
         if (btnSpeak) {
             btnSpeak.textContent = playing ? '⏹️停止' : '▶️再生';
             textInput.style.cursor = playing ? 'pointer' : 'text';
         }
 
-        if (btnSave) btnSave.disabled = playing;
-        if (btnFileClear) btnFileClear.disabled = playing;
+        // 保存実行中でなければ再生状態に応じて非活性を制御
+        if (btnSave && !isSaving) {
+            btnSave.disabled = playing || !isEngineReady || !textInput.value.trim();
+        }
+        if (btnFileClear) btnFileClear.disabled = playing || isSaving;
     
-        if (btnFileSelect) btnFileSelect.disabled = playing;
-        if (fontSizeSelect) fontSizeSelect.disabled = playing;
-        if (writingModeSelect) writingModeSelect.disabled = playing;
-        if (textInput) textInput.readOnly = playing;
+        if (btnFileSelect) btnFileSelect.disabled = playing || isSaving;
+        if (fontSizeSelect) fontSizeSelect.disabled = playing || isSaving;
+        if (writingModeSelect) writingModeSelect.disabled = playing || isSaving;
+        if (textInput) textInput.readOnly = playing || isSaving;
+    }
+
+    // ★追加: 保存ボタンの表示・状態を初期化するヘルパー関数
+    function resetSaveButton() {
+        isSaving = false;
+        isSaveCanceled = false;
+        if (btnSave) {
+            btnSave.textContent = '💾 保存';
+            btnSave.disabled = !isEngineReady || !textInput.value.trim();
+        }
+        btnSpeak.disabled = false;
+        if (btnFileSelect) btnFileSelect.disabled = false;
+        if (btnFileClear) btnFileClear.disabled = false;
+        if (fontSizeSelect) fontSizeSelect.disabled = false;
+        if (writingModeSelect) writingModeSelect.disabled = false;
+        if (textInput) textInput.readOnly = false;
     }
 
     // テキスト編集時
     textInput?.addEventListener('input', () => {
         const currentText = textInput.value.replace(/\r\n/g, '\n');
-        if (btnSave) btnSave.disabled = !currentText.trim();
+        if (btnSave && !isSaving) {
+            btnSave.disabled = !isEngineReady || !currentText.trim();
+        }
         
         if (currentText !== previousText) {
             currentLineIndex = 0;
@@ -503,34 +526,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Engine 初期化 & 再起動制御 ---
     async function initApp() {
         statusDiv.textContent = 'AivisSpeech Engine 起動中...';
+        isEngineReady = false;
         btnSpeak.disabled = true;
-        btnSave.disabled = true;
+        btnSave.disabled = true; // ★起動完了まで非活性化
         if (btnRestart) btnRestart.disabled = true;
 
         const ready = await window.api.initEngine();
         if (ready) {
             await loadSpeakers();
+            isEngineReady = true;
             btnSpeak.disabled = false;
-            btnSave.disabled = !textInput.value.trim();
+            btnSave.disabled = !textInput.value.trim(); // ★起動完了後にテキスト判定で有効化
         } else {
             statusDiv.textContent = 'Engineの起動に失敗しました';
         }
         if (btnRestart) btnRestart.disabled = false;
 
-        // ★第2引数に true を渡して、起動時のカーソル復元時にも行ハイライトを実行
         moveCursorToLineStart(currentLineIndex, true);
     }
 
-
     btnRestart?.addEventListener('click', async () => {
         statusDiv.textContent = 'AivisSpeech Engine 再起動中...';
+        isEngineReady = false;
         btnSpeak.disabled = true;
-        btnSave.disabled = true;
+        btnSave.disabled = true; // ★再起動中も非活性化
         btnRestart.disabled = true;
 
         const ready = await window.api.restartEngine();
         if (ready) {
             await loadSpeakers();
+            isEngineReady = true;
             btnSpeak.disabled = false;
             btnSave.disabled = !textInput.value.trim();
         } else {
@@ -548,9 +573,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             engineProgressBar.value = percent;
 
             if (isRunning) {
+                isEngineReady = true;
                 statusDiv.textContent = 'AivisSpeech Engine の起動が完了しました';
+                // ★エンジン起動完了に伴いボタンが「💾 保存」であることを確認して活性化
+                if (btnSave && !isSaving) {
+                    btnSave.disabled = !textInput.value.trim();
+                }
                 setTimeout(() => { engineProgressBar.hidden = true; }, 1000);
             } else {
+                isEngineReady = false;
+                if (btnSave) btnSave.disabled = true; // 起動中は非活性
                 statusDiv.textContent = `AivisSpeech Engine 起動確認中... (${current}/${total} - ${percent}%)`;
             }
         }
@@ -722,8 +754,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (lines.length === 0) return alert('テキストを入力してください');
 
-        btnSave.disabled = true;
+        // ★保存中状態へ移行
+        isSaving = true;
+        isSaveCanceled = false;
+
+        // ★ボタンを「❌ 中止」に変更
+        btnSave.textContent = '❌ 中止';
+        btnSave.disabled = false;
         btnSpeak.disabled = true;
+        if (btnFileSelect) btnFileSelect.disabled = true;
+        if (btnFileClear) btnFileClear.disabled = true;
+        if (fontSizeSelect) fontSizeSelect.disabled = true;
+        if (writingModeSelect) writingModeSelect.disabled = true;
+        if (textInput) textInput.readOnly = true;
 
         showProgressBar('mp3');
         if (mp3ProgressBar) mp3ProgressBar.value = 0;
@@ -732,12 +775,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             const audioBuffers = [];
 
             for (let i = 0; i < lines.length; i++) {
+                // ★ループごとにキャンセルフラグを確認
+                if (isSaveCanceled) {
+                    statusDiv.textContent = '保存処理を中止しました';
+                    return;
+                }
+
                 const progressPercent = Math.round(((i + 1) / lines.length) * 100);
                 
                 statusDiv.textContent = `音声生成中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
                 if (mp3ProgressBar) mp3ProgressBar.value = progressPercent;
 
                 const buffer = await fetchAudioBuffer(lines[i], speakerId);
+
+                // API通信待機後のキャンセル確認
+                if (isSaveCanceled) {
+                    statusDiv.textContent = '保存処理を中止しました';
+                    return;
+                }
+
                 audioBuffers.push(buffer);
             }
 
@@ -752,6 +808,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 defaultFilename = `${baseName}.mp3`;
             }
 
+            // MP3変換・書き込み前に最終キャンセル判定
+            if (isSaveCanceled) {
+                statusDiv.textContent = '保存処理を中止しました';
+                return;
+            }
+
             const success = await window.api.saveAudio(audioBuffers, defaultFilename);
             statusDiv.textContent = success ? '全文MP3保存が完了しました' : '保存がキャンセルまたは失敗しました';
 
@@ -759,8 +821,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             statusDiv.textContent = '保存エラーが発生しました';
             console.error(err);
         } finally {
-            btnSave.disabled = false;
-            btnSpeak.disabled = false;
+            // ★保存完了または中止時、常にボタン表示・状態を初期状態に戻す
+            resetSaveButton();
 
             setTimeout(() => {
                 if (mp3ProgressBar) mp3ProgressBar.hidden = true;
@@ -777,7 +839,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    btnSave?.addEventListener('click', saveFullTextMp3);
+    // ★「💾 保存」 / 「❌ 中止」 クリック時の分岐処理
+    btnSave?.addEventListener('click', () => {
+        if (isSaving) {
+            // 保存中にクリックされた場合はキャンセルフラグを立てる
+            isSaveCanceled = true;
+            btnSave.disabled = true; // 二重クリック防止
+        } else {
+            // 通常時は保存処理を実行
+            saveFullTextMp3();
+        }
+    });
 
     // アプリ初期化実行
     initApp();

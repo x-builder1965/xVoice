@@ -24,9 +24,19 @@
 
 ## 🚀 開発・実行手順
 
-### 1. リポジトリのクローンと依存関係のインストール
-
 ```bash
-git clone [https://github.com/x-builder1965/xVoice.git](https://github.com/x-builder1965/xVoice.git)
+# リポジトリのクローンと依存関係のインストール
+git clone https://github.com/x-builder1965/xVoice.git
 cd xVoice
 npm install
+
+# 開発モードで起動
+npm start
+
+# アプリのビルド・パッケージング
+npm run build          # Windows インストーラー生成（dist-win/ に出力）
+npm run dist           # x64 向け最大圧縮ビルド
+npm run dist:32        # 32bit 版ビルド
+npm run dist:portable  # ポータブル版 (.exe) の生成
+npm run sign           # 署名付きビルド（環境変数 CSC_KEY_PASSWORD が必要）
+```
