@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.08.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.12.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -374,4 +374,27 @@ input[type="file"]:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     filter: grayscale(30%);
+}
+
+/* トースト通知のベーススタイル */
+.toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(112, 20, 20, 0.9);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 20px;
+    box-shadow: 0 4px 12px rgba(88, 6, 6, 0.726);
+    z-index: 9999;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none; /* 下の要素の操作を邪魔しない */
+}
+
+/* 非表示状態 */
+.toast.hidden {
+    opacity: 0;
+    transform: translate(-50%, -10px);
 }

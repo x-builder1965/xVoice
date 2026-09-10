@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.11.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.12.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let textInput = null;
     let fontSizeSelect = null;
     let btnFileClear = null;
+    let btnSave = null;
     let btnSpeak = null;
     let btnGenerate = null;
     let audioPlayer = null;
@@ -35,6 +36,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let mp3ProgressBar = null;
     let textElem = null;
     let writingModeSelect = null;
+    let toastMessage = null;
 
     // 🔲グローバル変数定義🔲
     let isPlaying = false;
@@ -45,6 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let isGenerating = false;
     let isGenerateCanceled = false;
     let isEngineReady = false; // エラー時の状態判定用
+    let toastTimer = null;
 
     // 🔲初期設定🔲
     setupAllDomSettings();
@@ -246,6 +249,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnRestart.disabled = false;
     });
 
+    btnSave.addEventListener('click', async () => {
+        if (!textInput.value.trim()) {
+            showToast('💾 保存するテキストがありません。');
+            return;
+        }
+
+        const rawPath = filePathDisplay.textContent?.trim() || '';
+        // 「選択されていません」または「設定されていません」の場合は空文字にする
+        const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;        
+        const result = await window.api.saveTextFile(textInput.value, currentPath);
+        if (result.success) {
+            console.log('保存完了:', result.filePath);
+        }
+    });
+
     // 再生 / 停止のクリックイベント
     btnSpeak?.addEventListener('click', () => {
         if (isPlaying) {
@@ -302,6 +320,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         textInput = document.getElementById('text');
         fontSizeSelect = document.getElementById('font-size-select');
         btnFileClear = document.getElementById('btn-file-clear');
+        btnSave = document.getElementById('btn-save');
         btnSpeak = document.getElementById('btn-speak');
         btnGenerate = document.getElementById('btn-generate');
         audioPlayer = document.getElementById('audio-player');
@@ -311,6 +330,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         mp3ProgressBar = document.getElementById('mp3-progress');
         textElem = document.getElementById('text');
         writingModeSelect = document.getElementById('writing-mode-select');
+        toastMessage = document.getElementById('toast-message');
     }
 
     // Engine 初期化 & 再起動制御
@@ -693,8 +713,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function playLineByLine() {
         const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.split('\n');
-    
-        if (!fullText.trim()) return alert('テキストを入力してください');
+            
+        if (!fullText.trim()) return showToast('▶️ テキストを入力してください。');
     
         const normalizedPreviousText = previousText.replace(/\r\n/g, '\n');
     
@@ -817,7 +837,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const lines = textInput.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const speakerId = speakerSelect.value;
 
-        if (lines.length === 0) return alert('テキストを入力してください');
+        if (lines.length === 0) return showToast('🔊 テキストを入力してください。');
 
         // ★保存中状態へ移行
         isGenerating = true;
@@ -938,5 +958,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                 filePathDisplay.innerHTML = `<span class="file-path-text">${currentText}</span>`;
             }
         });
+    }
+
+    // オーバーレイメッセージ（トースト）を表示する関数
+    // @param {string} message - 表示するテキスト
+    function showToast(message) {
+        if (!toastMessage) return;
+
+        // 前回のタイマーが動いていれば解除
+        if (toastTimer) {
+            clearTimeout(toastTimer);
+        }
+
+        toastMessage.textContent = message;
+        toastMessage.classList.remove('hidden');
+
+        // 3秒後 (3000ms) に非表示にする
+        toastTimer = setTimeout(() => {
+            toastMessage.classList.add('hidden');
+        }, 3000);
     }
 });

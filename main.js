@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.11.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.12.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -129,6 +129,36 @@ ipcMain.handle('select-file', async () => {
 // 指定されたパスのファイルを直接読み込むIPCハンドラー
 ipcMain.handle('read-file-by-path', async (event, filePath) => {
     return readTextFile(filePath);
+});
+
+// テキスト保存用 IPC Main 処理
+ipcMain.handle('save-text-file', async (event, textContent, defaultPath) => {
+    const win = BrowserWindow.getFocusedWindow();
+
+    // 指定パスが存在する場合はそれを使用し、無ければデフォルトのファイル名を設定
+    const targetPath = (defaultPath && defaultPath.trim() !== '') 
+        ? defaultPath 
+        : 'xVoice_text.txt';
+
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+        title: 'ファイルを保存',
+        defaultPath: targetPath,
+        filters: [
+            { name: 'テキストファイル', extensions: ['txt'] },
+            { name: 'すべてのファイル', extensions: ['*'] }
+        ]
+    });
+
+    if (canceled || !filePath) {
+        return { success: false };
+    }
+
+    try {
+        fs.writeFileSync(filePath, textContent, 'utf-8');
+        return { success: true, filePath };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 });
 
 // 🔲共通ヘルパー関数🔲
