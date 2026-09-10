@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.01.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.02.0';
 // ---------------------------------------------------------------------
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
@@ -108,6 +108,17 @@ function createWindow() {
     return mainWindow;
 }
 
+// --- ファイル読み込みの共通処理 ---
+function readTextFile(filePath) {
+    try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        return { path: filePath, content: content };
+    } catch (err) {
+        console.error('File Read Error:', err);
+        return null;
+    }
+}
+
 // --- IPC ハンドラー登録 ---
 
 // アプリ起動時の初期化・Engine起動処理
@@ -204,11 +215,10 @@ ipcMain.handle('select-file', async () => {
         return null;
     }
 
-    const filePath = result.filePaths[0];
-    const content = fs.readFileSync(filePath, 'utf-8');
+    return readTextFile(result.filePaths[0]);
+});
 
-    return {
-        path: filePath,
-        content: content
-    };
+// --- 指定されたパスのファイルを直接読み込むIPCハンドラー ---
+ipcMain.handle('read-file-by-path', async (event, filePath) => {
+    return readTextFile(filePath);
 });

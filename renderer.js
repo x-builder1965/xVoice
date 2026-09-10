@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.01.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.02.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const btnTheme = document.getElementById('btn-theme');
@@ -40,6 +40,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         SPEAKER: 'xVoice_speaker'
     };
 
+    // --- 指定行の先頭にカーソルを移動しスクロール表示する共通関数 ---
+    function moveCursorToLineStart(lineIndex) {
+        if (!textInput) return;
+
+        const fullText = textInput.value.replace(/\r\n/g, '\n');
+        const lines = fullText.split('\n');
+
+        if (lines.length === 0) return;
+
+        // 範囲外のインデックスを補正
+        const targetIndex = Math.max(0, Math.min(lineIndex, lines.length - 1));
+
+        // 指定行の先頭位置（文字オフセット）を計算
+        let charOffset = 0;
+        for (let i = 0; i < targetIndex; i++) {
+            charOffset += lines[i].length + 1; // 改行文字 (+1) を考慮
+        }
+
+        // カーソル移動とフォーカス
+        textInput.focus();
+        textInput.setSelectionRange(charOffset, charOffset);
+
+        // スクロール位置の計算と移動
+        const computedStyle = window.getComputedStyle(textInput);
+        const parsedLineHeight = parseFloat(computedStyle.lineHeight);
+        const lineHeight = isNaN(parsedLineHeight) ? 20 : parsedLineHeight;
+
+        const targetScrollTop = (targetIndex * lineHeight) - (textInput.clientHeight / 2) + lineHeight;
+        textInput.scrollTop = Math.max(0, targetScrollTop);
+    }
+
     // --- 設定の復元ロジック ---
     if (audioPlayer) {
         const savedVolume = localStorage.getItem(STORAGE_KEYS.VOLUME);
@@ -76,28 +107,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     function applyFontSize(size) {
         if (!textInput) return;
 
-        // 1. 変更前の状態（スクロール位置・選択範囲・行高）を取得
         const oldLineHeight = parseFloat(window.getComputedStyle(textInput).lineHeight) || 20;
         const oldScrollTop = textInput.scrollTop;
         
-        // 再生中のハイライト保持用に選択範囲を退避
         const start = textInput.selectionStart;
         const end = textInput.selectionEnd;
 
-        // 2. フォントサイズの設定・反映
         textInput.style.fontSize = size;
         if (filePathDisplay) filePathDisplay.style.fontSize = size;
         if (fontSizeSelect) fontSizeSelect.value = size;
         localStorage.setItem(STORAGE_KEYS.FONT_SIZE, size);
 
-        // 3. 変更後の行高を取得し、スクロール位置を比率計算で調整
         const newLineHeight = parseFloat(window.getComputedStyle(textInput).lineHeight) || 20;
         if (oldLineHeight > 0) {
             const ratio = newLineHeight / oldLineHeight;
             textInput.scrollTop = oldScrollTop * ratio;
         }
 
-        // 4. 再生中の場合はフォーカスを再取得し、描画フレーム同期後にハイライトを復元
         if (isPlaying && start !== null && end !== null) {
             requestAnimationFrame(() => {
                 textInput.focus();
@@ -106,11 +132,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 保存されているフォントサイズを復元（デフォルト: 16px）
     const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
     applyFontSize(savedFontSize);
 
-    // 選択バー変更時のイベントリスナー
     fontSizeSelect?.addEventListener('change', (e) => {
         applyFontSize(e.target.value);
     });
@@ -168,18 +192,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // --- ファイル選択 ---
-    btnFileSelect?.addEventListener('click', async () => {
-        const fileData = await window.api.selectFile();
-        if (!fileData) return; // キャンセル時
+    // --- ファイル読み込み後の共通処理関数 ---
+    function loadFileContent(path, content) {
+        const loadedText = (content || '').replace(/\r\n/g, '\n');
 
-        const path = fileData.path;
-        const loadedText = (fileData.content || '').replace(/\r\n/g, '\n');
-
-        filePathDisplay.textContent = path;
+        if (filePathDisplay) filePathDisplay.textContent = path;
         localStorage.setItem(STORAGE_KEYS.FILE_PATH, path);
 
-        textInput.value = loadedText;
+        if (textInput) textInput.value = loadedText;
         previousText = loadedText;
         currentLineIndex = 0;
         isFirstPlay = true;
@@ -188,6 +208,61 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
 
         if (btnSave) btnSave.disabled = !textInput.value.trim();
+
+        moveCursorToLineStart(0);
+    }
+
+    // --- ファイル選択ボタン処理 ---
+    btnFileSelect?.addEventListener('click', async () => {
+        const fileData = await window.api.selectFile();
+        if (!fileData) return; // キャンセル時
+
+        loadFileContent(fileData.path, fileData.content);
+    });
+
+    // --- ドラッグ＆ドロップ（D&D）処理 ---
+    document.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isPlaying) return;
+        document.body.classList.add('drag-over');
+    });
+
+    document.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // ドラッグがウィンドウ外に出た場合のみ表示を解除
+        if (e.clientX === 0 && e.clientY === 0) {
+            document.body.classList.remove('drag-over');
+        }
+    });
+
+    document.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        document.body.classList.remove('drag-over');
+
+        if (isPlaying) return; // 再生中は処理しない
+
+        const files = e.dataTransfer?.files;
+        if (!files || files.length === 0) return;
+
+        const droppedFile = files[0];
+        // パス取得（Electron環境の対応）
+        const filePath = droppedFile.path || (window.api.getFilePath ? window.api.getFilePath(droppedFile) : '');
+
+        if (filePath) {
+            try {
+                // メインプロセス側でファイル内容を読み込むIPC経由の呼び出し
+                const fileData = await window.api.readFileByPath(filePath);
+                if (fileData) {
+                    loadFileContent(fileData.path, fileData.content);
+                }
+            } catch (err) {
+                console.error('D&D ファイル読み込みエラー:', err);
+                statusDiv.textContent = 'ファイルの読み込みに失敗しました';
+            }
+        }
     });
 
     // クリアボタンのクリックイベント
@@ -213,7 +288,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (btnSave) btnSave.disabled = playing;
         if (btnFileClear) btnFileClear.disabled = playing;
     
-        // 再生中の無効化制御
         if (btnFileSelect) btnFileSelect.disabled = playing;
         if (fontSizeSelect) fontSizeSelect.disabled = playing;
         if (textInput) textInput.readOnly = playing;
@@ -251,7 +325,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
             });
 
-            // 保存されている話者モデル（ID）を復元
             const savedSpeaker = localStorage.getItem(STORAGE_KEYS.SPEAKER);
             if (savedSpeaker) {
                 const exists = Array.from(speakerSelect.options).some(opt => opt.value === String(savedSpeaker));
@@ -284,6 +357,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             statusDiv.textContent = 'Engineの起動に失敗しました';
         }
         if (btnRestart) btnRestart.disabled = false;
+
+        moveCursorToLineStart(currentLineIndex);
     }
 
     btnRestart?.addEventListener('click', async () => {
@@ -348,6 +423,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         statusDiv.textContent = `停止しました (${currentLineIndex + 1} 行目で停止中)`;
         updateButtonStates(false);
+
+        moveCursorToLineStart(currentLineIndex);
     });
 
     // --- 1. 「1行毎に合成・再生（ハイライト＋自動スクロール付き）」処理 ---
@@ -395,7 +472,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             const i = currentLineIndex;
             localStorage.setItem(STORAGE_KEYS.LINE_INDEX, i);
     
-            // ★ 毎行の処理開始時に最新の選択話者IDを取得
             const currentSpeakerId = speakerSelect.value;
     
             const progressPercent = Math.round(((i + 1) / lines.length) * 100);
@@ -422,7 +498,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 textInput.scrollTop = Math.max(0, targetScrollTop);
     
                 try {
-                    // ★ 取得した最新の currentSpeakerId を渡して音声合成を実行
                     const audioData = await fetchAudioBuffer(lineTrimmed, currentSpeakerId);
                     if (isStopped || isLineJumped) {
                         if (isLineJumped) {
@@ -508,10 +583,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             statusDiv.textContent = 'MP3へ変換・保存中...';
 
             let defaultFilename = 'xVoice生成.mp3';
-            const selectedFile = fileInput?.files?.[0];
-
-            if (selectedFile) {
-                const originalName = selectedFile.name;
+            const savedPath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
+            if (savedPath && savedPath !== '選択されていません') {
+                const parts = savedPath.split(/[/\\]/);
+                const originalName = parts[parts.length - 1];
                 const baseName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
                 defaultFilename = `${baseName}.mp3`;
             }
