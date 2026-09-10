@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.06.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.07.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const btnTheme = document.getElementById('btn-theme');
@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // --- 指定行の先頭にカーソルを移動しスクロール表示する共通関数 ---
-    function moveCursorToLineStart(lineIndex) {
+    function moveCursorToLineStart(lineIndex, highlight = isPlaying) {
         if (!textInput) return;
     
         const fullText = textInput.value.replace(/\r\n/g, '\n');
@@ -73,11 +73,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     
         const currentLineLength = lines[targetIndex].length;
     
-        // 1. まず標準のフォーカスと範囲選択を適用
+        // 1. フォーカスと選択範囲（ハイライト）の適用
         textInput.focus({ preventScroll: true });
-        if (isPlaying) {
+        if (highlight) {
+            // 行全体をハイライト選択
             textInput.setSelectionRange(charOffset, charOffset + currentLineLength);
         } else {
+            // 単一カーソル位置のみ設定
             textInput.setSelectionRange(charOffset, charOffset);
         }
     
@@ -514,8 +516,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         if (btnRestart) btnRestart.disabled = false;
 
-        moveCursorToLineStart(currentLineIndex);
+        // ★第2引数に true を渡して、起動時のカーソル復元時にも行ハイライトを実行
+        moveCursorToLineStart(currentLineIndex, true);
     }
+
 
     btnRestart?.addEventListener('click', async () => {
         statusDiv.textContent = 'AivisSpeech Engine 再起動中...';
@@ -580,7 +584,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusDiv.textContent = `停止しました (${currentLineIndex + 1} 行目で停止中)`;
         updateButtonStates(false);
 
-        moveCursorToLineStart(currentLineIndex);
+        // ★第2引数に true を明示的に指定して、停止後もハイライトを維持
+        moveCursorToLineStart(currentLineIndex, true);
     }
 
     // --- 1. 「1行毎に合成・再生（ハイライト＋自動スクロール付き）」処理 ---
@@ -699,9 +704,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!isStopped && !isLineJumped) {
             currentLineIndex = 0;
             localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
-            textInput.setSelectionRange(fullText.length, fullText.length);
             statusDiv.textContent = '再生完了';
             if (textProgressBar) textProgressBar.value = 100;
+            
+            // ★再生完了時にも先頭行（0行目）をハイライト表示
+            moveCursorToLineStart(0, true);
         }
     
         updateButtonStates(false);
