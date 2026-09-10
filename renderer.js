@@ -1,7 +1,6 @@
-// -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.03.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.04.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const btnTheme = document.getElementById('btn-theme');
@@ -20,6 +19,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const engineProgressBar = document.getElementById('engine-progress');
     const textProgressBar = document.getElementById('text-progress');
     const mp3ProgressBar = document.getElementById('mp3-progress');
+    const textElem = document.getElementById('text');
+    const writingModeSelect = document.getElementById('writing-mode-select');
 
     const AIVIS_HOST = 'http://127.0.0.1:10101';
 
@@ -37,7 +38,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         LINE_INDEX: 'xVoice_lineIndex',
         VOLUME: 'xVoice_volume',
         FONT_SIZE: 'xVoice_fontSize',
-        SPEAKER: 'xVoice_speaker'
+        SPEAKER: 'xVoice_speaker',
+        TEXT_DIRECTION: 'xVoice_textDirection'
     };
 
     window.addEventListener('resize', updateFilePathMarquee);
@@ -86,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const savedFilePath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
     if (savedFilePath) {
         filePathDisplay.textContent = savedFilePath;
-        updateFilePathMarquee(); // ← 追記
+        updateFilePathMarquee();
     }
 
     const savedText = localStorage.getItem(STORAGE_KEYS.TEXT);
@@ -104,6 +106,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- 話者モデルの選択変更リスナー ---
     speakerSelect?.addEventListener('change', (e) => {
         localStorage.setItem(STORAGE_KEYS.SPEAKER, e.target.value);
+    });
+
+    // --- テキストの表示向き設定・適用処理 ---
+    function applyTextDirection(direction) {
+        if (!textInput) return;
+
+        textInput.style.writingMode = direction;
+        if (writingModeSelect) writingModeSelect.value = direction;
+        localStorage.setItem(STORAGE_KEYS.TEXT_DIRECTION, direction);
+    }
+
+    const savedTextDirection = localStorage.getItem(STORAGE_KEYS.TEXT_DIRECTION) || 'horizontal-tb';
+    applyTextDirection(savedTextDirection);
+
+    writingModeSelect?.addEventListener('change', (e) => {
+        applyTextDirection(e.target.value);
     });
 
     // --- フォントサイズの適用・変更処理 ---
@@ -138,9 +156,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
     applyFontSize(savedFontSize);
 
-    fontSizeSelect?.addEventListener('change', (e) => {
-        applyFontSize(e.target.value);
-    });
+    // フォントサイズ変更イベント処理
+    if (fontSizeSelect && textElem) {
+        fontSizeSelect.addEventListener('change', (e) => {
+            textElem.style.fontSize = e.target.value;
+        });
+    }
+
+    // 縦書き・横書き切替イベント処理
+    if (writingModeSelect && textElem) {
+        writingModeSelect.addEventListener('change', (e) => {
+            if (e.target.value === 'vertical-rl') {
+                textElem.classList.add('is-vertical');
+            } else {
+                textElem.classList.remove('is-vertical');
+            }
+        });
+    }
 
     // --- 進捗バー表示切り替えヘルパー ---
     function showProgressBar(type) {
@@ -236,7 +268,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.addEventListener('dragleave', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        // ドラッグがウィンドウ外に出た場合のみ表示を解除
         if (e.clientX === 0 && e.clientY === 0) {
             document.body.classList.remove('drag-over');
         }
@@ -247,18 +278,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         e.stopPropagation();
         document.body.classList.remove('drag-over');
 
-        if (isPlaying) return; // 再生中は処理しない
+        if (isPlaying) return;
 
         const files = e.dataTransfer?.files;
         if (!files || files.length === 0) return;
 
         const droppedFile = files[0];
-        // パス取得（Electron環境の対応）
         const filePath = droppedFile.path || (window.api.getFilePath ? window.api.getFilePath(droppedFile) : '');
 
         if (filePath) {
             try {
-                // メインプロセス側でファイル内容を読み込むIPC経由の呼び出し
                 const fileData = await window.api.readFileByPath(filePath);
                 if (fileData) {
                     loadFileContent(fileData.path, fileData.content);
@@ -296,6 +325,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
         if (btnFileSelect) btnFileSelect.disabled = playing;
         if (fontSizeSelect) fontSizeSelect.disabled = playing;
+        if (writingModeSelect) writingModeSelect.disabled = playing;
         if (textInput) textInput.readOnly = playing;
     }
 
@@ -629,7 +659,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const currentText = filePathDisplay.innerText.trim();
         if (!currentText) return;
 
-        // 同じテキスト要素を2個並べて構造化
         filePathDisplay.innerHTML = `
             <span class="file-path-text">
                 <span class="marquee-item">${currentText}</span>
@@ -643,14 +672,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         requestAnimationFrame(() => {
             const containerWidth = filePathDisplay.clientWidth;
-            // 単一テキスト要素（1個分）の幅を取得
             const singleTextWidth = firstItem.getBoundingClientRect().width;
 
-            // 1個のテキスト幅が枠を超えている場合のみ連続スクロールを有効化
             if (singleTextWidth > containerWidth) {
                 textSpan.classList.add('scrolling');
             } else {
-                // はみ出していない場合は単一表示に戻す
                 filePathDisplay.innerHTML = `<span class="file-path-text">${currentText}</span>`;
             }
         });
