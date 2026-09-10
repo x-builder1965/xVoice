@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.05.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.06.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const btnTheme = document.getElementById('btn-theme');
@@ -197,6 +197,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             localStorage.setItem(STORAGE_KEYS.VOLUME, audioPlayer.volume);
         });
     }
+    
+    const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
+    applyFontSize(savedFontSize);
 
     const savedFilePath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
     if (savedFilePath) {
@@ -252,6 +255,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (fontSizeSelect) fontSizeSelect.value = size;
         localStorage.setItem(STORAGE_KEYS.FONT_SIZE, size);
 
+        // ★フォントサイズ変更に伴いファイルパスの横幅が変わるため、スクロール表示を再計算
+        updateFilePathMarquee();
+
         const newLineHeight = parseFloat(window.getComputedStyle(textInput).lineHeight) || 20;
         if (oldLineHeight > 0) {
             const ratio = newLineHeight / oldLineHeight;
@@ -266,13 +272,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
-    applyFontSize(savedFontSize);
-
     // フォントサイズ変更イベント処理
-    if (fontSizeSelect && textElem) {
+    if (fontSizeSelect) {
         fontSizeSelect.addEventListener('change', (e) => {
-            textElem.style.fontSize = e.target.value;
+            applyFontSize(e.target.value);
         });
     }
 
