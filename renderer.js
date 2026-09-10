@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.02.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.03.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const btnTheme = document.getElementById('btn-theme');
@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         FONT_SIZE: 'xVoice_fontSize',
         SPEAKER: 'xVoice_speaker'
     };
+
+    window.addEventListener('resize', updateFilePathMarquee);
 
     // --- 指定行の先頭にカーソルを移動しスクロール表示する共通関数 ---
     function moveCursorToLineStart(lineIndex) {
@@ -84,6 +86,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const savedFilePath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
     if (savedFilePath) {
         filePathDisplay.textContent = savedFilePath;
+        updateFilePathMarquee(); // ← 追記
     }
 
     const savedText = localStorage.getItem(STORAGE_KEYS.TEXT);
@@ -198,6 +201,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (filePathDisplay) filePathDisplay.textContent = path;
         localStorage.setItem(STORAGE_KEYS.FILE_PATH, path);
+    
+        updateFilePathMarquee();
 
         if (textInput) textInput.value = loadedText;
         previousText = loadedText;
@@ -268,6 +273,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // クリアボタンのクリックイベント
     btnFileClear?.addEventListener('click', () => {
         filePathDisplay.textContent = '選択されていません';
+        updateFilePathMarquee();
         if (textInput) textInput.value = '';
         if (btnSave) btnSave.disabled = true;
 
@@ -615,4 +621,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // アプリ初期化実行
     initApp();
+
+    // --- file-path-display のはみ出しチェックとスクロール適用関数 ---
+    function updateFilePathMarquee() {
+        if (!filePathDisplay) return;
+
+        const currentText = filePathDisplay.innerText.trim();
+        if (!currentText) return;
+
+        // 同じテキスト要素を2個並べて構造化
+        filePathDisplay.innerHTML = `
+            <span class="file-path-text">
+                <span class="marquee-item">${currentText}</span>
+                <span class="marquee-item">${currentText}</span>
+            </span>
+        `;
+
+        const textSpan = filePathDisplay.querySelector('.file-path-text');
+        const firstItem = filePathDisplay.querySelector('.marquee-item');
+        if (!textSpan || !firstItem) return;
+
+        requestAnimationFrame(() => {
+            const containerWidth = filePathDisplay.clientWidth;
+            // 単一テキスト要素（1個分）の幅を取得
+            const singleTextWidth = firstItem.getBoundingClientRect().width;
+
+            // 1個のテキスト幅が枠を超えている場合のみ連続スクロールを有効化
+            if (singleTextWidth > containerWidth) {
+                textSpan.classList.add('scrolling');
+            } else {
+                // はみ出していない場合は単一表示に戻す
+                filePathDisplay.innerHTML = `<span class="file-path-text">${currentText}</span>`;
+            }
+        });
+    }
 });

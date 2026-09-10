@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.01.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.03.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -233,20 +233,58 @@ input[type="file"] {
     display: none;
 }
 
+/* style.css の該当箇所を以下のように修正します */
+
+/* style.css の該当箇所を以下のように修正 */
+
 .file-path-display {
     flex: 1;
+    min-width: 0;
+    flex-shrink: 1;
     margin-top: 0;
-    padding: 5px 8px; /* 10px 12px -> 5px 8px に縮小 */
+    padding: 5px 8px;
     background-color: var(--input-bg);
-    color: var(--status-color);
+    color: var(--text-color);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     font-size: 0.85rem;
-    word-break: break-all;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     box-sizing: border-box;
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+}
+
+/* テキストを横並びにするラッパー */
+.file-path-text {
+    display: inline-block;
+    white-space: nowrap;
+}
+
+/* スクロール有効化時 */
+.file-path-text.scrolling {
+    /* 移動量が半分になるため、10s〜12s 程度で丁度良い速度になります */
+    animation: marquee-scroll 10s linear infinite;
+}
+
+/* 各テキストの間に間隔（スペース）を空ける設定 */
+.file-path-text .marquee-item {
+    display: inline-block;
+    padding-right: 10em; /* ループ時のテキスト同士の間隔 */
+}
+
+/* マウスホバーで一時停止 */
+.file-path-display:hover .file-path-text.scrolling {
+    animation-play-state: paused;
+}
+
+/* テキスト1個分（-50%）移動したら先頭へループ */
+@keyframes marquee-scroll {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
 }
 
 /* クリアボタン用スタイル調整 */
