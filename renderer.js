@@ -1,6 +1,7 @@
+// -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.04.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.05.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const btnTheme = document.getElementById('btn-theme');
@@ -12,7 +13,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const fontSizeSelect = document.getElementById('font-size-select');
     const btnFileClear = document.getElementById('btn-file-clear');
     const btnSpeak = document.getElementById('btn-speak');
-    const btnStop = document.getElementById('btn-stop');
     const btnSave = document.getElementById('btn-save');
     const audioPlayer = document.getElementById('audio-player');
     const statusDiv = document.getElementById('status');
@@ -42,37 +42,150 @@ document.addEventListener('DOMContentLoaded', async () => {
         TEXT_DIRECTION: 'xVoice_textDirection'
     };
 
-    window.addEventListener('resize', updateFilePathMarquee);
+    window.addEventListener('resize', () => {
+        updateFilePathMarquee();
+        if (textInput) {
+            // 即時反映と、リサイズ完了後の確定反映の2段階で実行
+            moveCursorToLineStart(currentLineIndex);
+            setTimeout(() => {
+                moveCursorToLineStart(currentLineIndex);
+            }, 500);
+        }
+    });
 
     // --- 指定行の先頭にカーソルを移動しスクロール表示する共通関数 ---
     function moveCursorToLineStart(lineIndex) {
         if (!textInput) return;
-
+    
         const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.split('\n');
-
+    
         if (lines.length === 0) return;
-
+    
         // 範囲外のインデックスを補正
         const targetIndex = Math.max(0, Math.min(lineIndex, lines.length - 1));
-
+    
         // 指定行の先頭位置（文字オフセット）を計算
         let charOffset = 0;
         for (let i = 0; i < targetIndex; i++) {
-            charOffset += lines[i].length + 1; // 改行文字 (+1) を考慮
+            charOffset += lines[i].length + 1; // 改行文字 (+1)
+        }
+    
+        const currentLineLength = lines[targetIndex].length;
+    
+        // 1. まず標準のフォーカスと範囲選択を適用
+        textInput.focus({ preventScroll: true });
+        if (isPlaying) {
+            textInput.setSelectionRange(charOffset, charOffset + currentLineLength);
+        } else {
+            textInput.setSelectionRange(charOffset, charOffset);
+        }
+    
+        // 2. 鏡像（ミラー）要素を使って該当行の正確なピクセル位置を取得し中央へスクロール
+        scrollTextareaToCharOffset(textInput, charOffset);
+    }
+
+    // --- textarea の特定文字位置を正確に画面中央へスクロールさせるヘルパー関数 ---
+    function scrollTextareaToCharOffset(textarea, charIndex) {
+        const style = window.getComputedStyle(textarea);
+        const isVertical = style.writingMode.startsWith('vertical');
+
+        // 1. ミラー要素を作成してスタイルを完全複製
+        const mirror = document.createElement('div');
+        
+        const stylesToCopy = [
+            'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing',
+            'lineHeight', 'textTransform', 'wordBreak', 'overflowWrap', 'whiteSpace',
+            'padding', 'boxSizing', 'direction'
+        ];
+        stylesToCopy.forEach(prop => {
+            mirror.style[prop] = style[prop];
+        });
+
+        // 縦書きスタイルを明示的にセット
+        if (isVertical) {
+            mirror.style.writingMode = 'vertical-rl';
+            mirror.style.webkitWritingMode = 'vertical-rl';
+            // 縦書きの行折り返し幅を一致させるため、clientHeightをそのまま固定
+            mirror.style.height = `${textarea.clientHeight}px`;
+            mirror.style.width = 'auto';
+        } else {
+            mirror.style.writingMode = 'horizontal-tb';
+            mirror.style.width = `${textarea.clientWidth}px`;
+            mirror.style.height = 'auto';
         }
 
-        // カーソル移動とフォーカス
-        textInput.focus();
-        textInput.setSelectionRange(charOffset, charOffset);
+        // 画面外に隠す設定
+        mirror.style.position = 'absolute';
+        mirror.style.top = '-9999px';
+        mirror.style.left = '-9999px';
+        mirror.style.visibility = 'hidden';
+        mirror.style.overflow = 'hidden';
 
-        // スクロール位置の計算と移動
-        const computedStyle = window.getComputedStyle(textInput);
-        const parsedLineHeight = parseFloat(computedStyle.lineHeight);
-        const lineHeight = isNaN(parsedLineHeight) ? 20 : parsedLineHeight;
+        // 2. ターゲット文字に span を挿入
+        const textBefore = textarea.value.substring(0, charIndex);
+        const textAfter = textarea.value.substring(charIndex);
 
-        const targetScrollTop = (targetIndex * lineHeight) - (textInput.clientHeight / 2) + lineHeight;
-        textInput.scrollTop = Math.max(0, targetScrollTop);
+        const span = document.createElement('span');
+        span.textContent = textAfter.charAt(0) || ' ';
+
+        mirror.textContent = textBefore;
+        mirror.appendChild(span);
+
+        document.body.appendChild(mirror);
+
+        if (isVertical) {
+            // --- 縦書き (vertical-rl) の中央スクロール計算 ---
+            
+            // ミラー要素内での span の左端位置と幅
+            const spanLeft = span.offsetLeft;
+            const spanWidth = span.offsetWidth || parseFloat(style.fontSize);
+            const mirrorWidth = mirror.scrollWidth;
+
+            document.body.removeChild(mirror);
+
+            // ミラーの「右端」から対象文字の「中心」までのピクセル距離
+            const charCenterFromRight = mirrorWidth - (spanLeft + (spanWidth / 2));
+
+            // textarea の表示幅
+            const clientWidth = textarea.clientWidth;
+            const scrollWidth = textarea.scrollWidth;
+
+            // 右端(0) から左へ向かうスクロール目標量 (px)
+            // 画面中央に来るための「右端からの距離」
+            const targetOffsetFromRight = charCenterFromRight - (clientWidth / 2);
+
+            // Chromiumの vertical-rl は 右端=0、左へいくほどマイナス値 (-100, -200...)
+            // targetOffsetFromRight がプラスであればマイナス化、マイナス（画面幅より右）なら 0 に止める
+            let targetScrollLeft = -targetOffsetFromRight;
+
+            // 【範囲ガード】
+            // 1. 右外に飛ばないよう 0 以下に制限（0 = 右端ピッタリ）
+            if (targetScrollLeft > 0) {
+                targetScrollLeft = 0;
+            }
+
+            // 2. 左端の限界を超えないようクランプ
+            const maxNegativeScroll = -(scrollWidth - clientWidth);
+            if (targetScrollLeft < maxNegativeScroll) {
+                targetScrollLeft = maxNegativeScroll;
+            }
+
+            // スクロール適用
+            textarea.scrollLeft = targetScrollLeft;
+
+        } else {
+            // --- 横書き (horizontal-tb) の計算 ---
+            const spanTop = span.offsetTop;
+            const spanHeight = span.offsetHeight || parseFloat(style.fontSize);
+
+            document.body.removeChild(mirror);
+
+            const clientHeight = textarea.clientHeight;
+            const targetTop = spanTop - (clientHeight / 2) + (spanHeight / 2);
+
+            textarea.scrollTop = Math.max(0, targetTop);
+        }
     }
 
     // --- 設定の復元ロジック ---
@@ -318,8 +431,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- ボタンおよび入力要素の状態管理 ---
     function updateButtonStates(playing) {
         isPlaying = playing;
-        btnSpeak.disabled = playing;
-        btnStop.disabled = !playing;
+        
+        // 再生ボタンの表示と役割をトグル
+        if (btnSpeak) {
+            btnSpeak.textContent = playing ? '⏹️停止' : '▶️再生';
+        }
+
         if (btnSave) btnSave.disabled = playing;
         if (btnFileClear) btnFileClear.disabled = playing;
     
@@ -447,8 +564,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         return await synthRes.arrayBuffer();
     }
 
-    // 停止ボタン処理
-    btnStop?.addEventListener('click', () => {
+    // 停止処理関数
+    function stopPlayback() {
         if (!isPlaying) return;
 
         isStopped = true;
@@ -461,7 +578,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateButtonStates(false);
 
         moveCursorToLineStart(currentLineIndex);
-    });
+    }
 
     // --- 1. 「1行毎に合成・再生（ハイライト＋自動スクロール付き）」処理 ---
     async function playLineByLine() {
@@ -527,12 +644,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (lineTrimmed.length > 0) {
                 statusDiv.textContent = `再生中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
     
-                textInput.focus();
-                textInput.setSelectionRange(charOffset, charOffset + lineLength);
-    
-                const targetScrollTop = (i * lineHeight) - (textInput.clientHeight / 2) + lineHeight;
-                textInput.scrollTop = Math.max(0, targetScrollTop);
-    
+                // 共通関数を呼び出し（フォーカス、ハイライト範囲指定、中央スクロールを一括実行）
+                moveCursorToLineStart(i);
+
                 try {
                     const audioData = await fetchAudioBuffer(lineTrimmed, currentSpeakerId);
                     if (isStopped || isLineJumped) {
@@ -643,10 +757,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // イベントリスナーの追加
+    // 再生 / 停止 トグルイベントリスナー
     btnSpeak?.addEventListener('click', () => {
-        if (!isPlaying) playLineByLine();
+        if (isPlaying) {
+            stopPlayback();
+        } else {
+            playLineByLine();
+        }
     });
+
     btnSave?.addEventListener('click', saveFullTextMp3);
 
     // アプリ初期化実行
@@ -656,9 +775,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     function updateFilePathMarquee() {
         if (!filePathDisplay) return;
 
-        const currentText = filePathDisplay.innerText.trim();
-        if (!currentText) return;
+        // 現在表示されているテキストを取得
+        const firstItem = filePathDisplay.querySelector('.marquee-item');
+        const currentText = firstItem ? firstItem.textContent.trim() : filePathDisplay.textContent.trim();
 
+        if (!currentText || currentText === '選択されていません') {
+            filePathDisplay.innerHTML = `<span class="file-path-text">${currentText}</span>`;
+            return;
+        }
+
+        // アニメーション用に同じテキストを2つ並べた構造を生成
         filePathDisplay.innerHTML = `
             <span class="file-path-text">
                 <span class="marquee-item">${currentText}</span>
@@ -667,16 +793,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         `;
 
         const textSpan = filePathDisplay.querySelector('.file-path-text');
-        const firstItem = filePathDisplay.querySelector('.marquee-item');
-        if (!textSpan || !firstItem) return;
+        const itemElem = filePathDisplay.querySelector('.marquee-item');
+        if (!textSpan || !itemElem) return;
 
+        // レイアウト確定後に幅を取得してアニメーションを適用
         requestAnimationFrame(() => {
             const containerWidth = filePathDisplay.clientWidth;
-            const singleTextWidth = firstItem.getBoundingClientRect().width;
+            // 余白（padding-right）を含めた1要素分の全幅
+            const singleItemWidth = itemElem.getBoundingClientRect().width;
 
-            if (singleTextWidth > containerWidth) {
+            // 1要素分の幅がコンテナ領域を超えている場合のみスクロールを有効化
+            if (singleItemWidth > containerWidth) {
+                const speed = 100; // スクロール速度 (px/秒)
+                const duration = singleItemWidth / speed;
+
+                textSpan.style.setProperty('--marquee-duration', `${duration}s`);
                 textSpan.classList.add('scrolling');
             } else {
+                // 収まる場合は通常のテキスト表示に戻す
                 filePathDisplay.innerHTML = `<span class="file-path-text">${currentText}</span>`;
             }
         });

@@ -1,10 +1,11 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.04.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.05.0';
  ---------------------------------------------------------------------
  【変更履歴】
- 2026-09-10 Ver1.04.0 縦書き・横書き切り替え機能の追加。
+ 2026-09-10 Ver1.05.0 縦向き・横向き切り替えに伴うカーソル位置ずれ対応。
+ 2026-09-10 Ver1.04.0 縦向き・横向き切り替え機能の追加。
  2026-09-10 Ver1.03.0 選択ファイルパスのスクロール機能の追加。
  2026-09-10 Ver1.02.0 ドラッグ＆ドロップテキスト読み込み機能の追加。
  2026-09-10 Ver1.01.0 テキストのフォント拡大・縮小機能の追加。
@@ -23,7 +24,7 @@
         <div class="header">
             <h1 class="app-title">
                 <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
-                xVoice -テキスト音声読み上げ- Ver1.04.0
+                xVoice -テキスト音声読み上げ- Ver1.05.0
             </h1>
             <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替">☀️</button>
         </div>
@@ -38,8 +39,6 @@
         <!-- ファイル選択・テキスト設定コントロール部 -->
         <div class="field">
             <div class="file-input-group">
-                <button id="btn-file-select" class="btn-primary">📁 ファイル選択</button>
-                <span id="file-path-display" class="file-path-display">選択されていません</span>
                 <select id="font-size-select" title="文字サイズ変更">
                     <option value="12px">小</option>
                     <option value="16px" selected>中</option>
@@ -50,8 +49,9 @@
                     <option value="horizontal-tb" selected>横向き</option>
                     <option value="vertical-rl">縦向き</option>
                 </select>
+                <button id="btn-file-select" class="btn-primary">📁 ファイル選択</button>
+                <span id="file-path-display" class="file-path-display">選択されていません</span>
                 <button id="btn-speak" class="btn-primary">▶️ 再生</button>
-                <button id="btn-stop" class="btn-secondary" disabled>⏹️ 停止</button>
                 <button id="btn-save" class="btn-secondary">💾 保存</button>
                 <button id="btn-file-clear" class="file-select-btn" type="button">🗑️ クリア</button>
             </div>

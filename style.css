@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.04.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.05.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -238,6 +238,7 @@ input[type="file"] {
     display: none;
 }
 
+/* --- ファイルパス マーキー表示エリア --- */
 .file-path-display {
     flex: 1;
     min-width: 0;
@@ -261,21 +262,30 @@ input[type="file"] {
 }
 
 .file-path-text.scrolling {
-    animation: marquee-scroll 10s linear infinite;
+    display: inline-block;
+    white-space: nowrap;
+    /* JSから渡される --marquee-duration を使用 */
+    animation: marquee-scroll var(--marquee-duration, 10s) linear infinite;
 }
 
+/* 各テキスト要素のスタイル */
 .file-path-text .marquee-item {
     display: inline-block;
-    padding-right: 20em;
+    padding-right: 20rem; /* 20emから固定値（例: 3remまたは50pxなど）へ変更して計算のズレを防止 */
 }
 
 .file-path-display:hover .file-path-text.scrolling {
     animation-play-state: paused;
 }
 
+/* 2つの .marquee-item のうち、1つ分の幅（50%）だけ左へスライド */
 @keyframes marquee-scroll {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
 }
 
 #btn-file-clear {
