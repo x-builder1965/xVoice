@@ -1,8 +1,10 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.02.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.11.0';
 // ---------------------------------------------------------------------
+// 🔲イミディエイト定義🔲
+// インクルードエリアス定義
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -11,116 +13,39 @@ const http = require('http');
 const { exec, spawn } = require('child_process');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
-
-ffmpeg.setFfmpegPath(ffmpegStatic.replace('app.asar', 'app.asar.unpacked'));
-
+// AivisSpeech-Engine定義
 const ENGINE_PATH = 'C:\\Program Files\\AivisSpeech\\AivisSpeech-Engine';
 const ENGINE_EXE = 'run.exe';
 const AIVIS_HOST = 'http://127.0.0.1:10101';
 
+// 🔲グローバル変数🔲
 let mainWindow = null;
 // 本アプリ経由でエンジンを起動したかを管理するフラグ
 let isEngineSpawnedByApp = false;
 
-// --- Engineのヘルスチェック (起動完了待ち) ---
-function checkEngineHealth() {
-    return new Promise((resolve) => {
-        http.get(`${AIVIS_HOST}/version`, (res) => {
-            resolve(res.statusCode === 200);
-        }).on('error', () => {
-            resolve(false);
-        });
-    });
-}
+// 🔲初期設定🔲
+// FFMpegオブジェクト生成
+ffmpeg.setFfmpegPath(ffmpegStatic.replace('app.asar', 'app.asar.unpacked'));
 
-// --- Engine起動状態確認＆起動処理 ---
-async function startAivisEngine() {
-    const isRunning = await checkEngineHealth();
-    if (isRunning) {
-        if (mainWindow) mainWindow.webContents.send('engine-progress-update', { current: 60, total: 60, isRunning: true });
-        // 既に外部等で起動済みの場合は自前起動フラグを立てない
-        return true;
+// 🔲app イベント🔲
+// アプリ初期化 ＆ 終了処理
+app.whenReady().then(createWindow);
+
+// アプリ終了処理
+app.on('will-quit', async (event) => {
+    // 本アプリによって起動された場合のみエンジンを終了
+    if (isEngineSpawnedByApp) {
+        event.preventDefault();
+        await stopAivisEngine();
+        process.exit(0);
     }
+});
 
-    // run.exe 起動
-    spawn(ENGINE_EXE, ['--host', '0.0.0.0', '--port', '10101', '--load_all_models'], {
-        cwd: ENGINE_PATH,
-        detached: true,
-        stdio: 'ignore'
-    }).unref();
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+});
 
-    // 本アプリで起動したためフラグを有効化
-    isEngineSpawnedByApp = true;
-
-    const maxTries = 60;
-    for (let i = 1; i <= maxTries; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-
-        // 進捗状況を画面に送出
-        if (mainWindow) {
-            mainWindow.webContents.send('engine-progress-update', { current: i, total: maxTries, isRunning: false });
-        }
-
-        if (await checkEngineHealth()) {
-            if (mainWindow) {
-                mainWindow.webContents.send('engine-progress-update', { current: maxTries, total: maxTries, isRunning: true });
-            }
-            return true;
-        }
-    }
-    return false;
-}
-
-// --- Engine停止処理 (taskkill) ---
-function stopAivisEngine() {
-    return new Promise((resolve) => {
-        exec(`taskkill /F /IM ${ENGINE_EXE}`, () => {
-            isEngineSpawnedByApp = false; // 停止完了後にフラグをリセット
-            resolve(true);
-        });
-    });
-}
-
-function createWindow() {
-    mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 720,
-        title: 'xVoice -テキスト読み上げ-',
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false,
-            webSecurity: true,
-            sandbox: false
-        },
-        icon: path.join(__dirname, 'xVoice.ico'),
-        autoHideMenuBar: true,
-        show: false // ちらつき防止
-    });
-
-    mainWindow.loadFile('index.html');
-    mainWindow.maximize();
-
-    mainWindow.once('ready-to-show', () => {
-        mainWindow.show();
-    });
-
-    return mainWindow;
-}
-
-// --- ファイル読み込みの共通処理 ---
-function readTextFile(filePath) {
-    try {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        return { path: filePath, content: content };
-    } catch (err) {
-        console.error('File Read Error:', err);
-        return null;
-    }
-}
-
-// --- IPC ハンドラー登録 ---
-
+// 🔲IPC ハンドラー登録🔲
 // アプリ起動時の初期化・Engine起動処理
 ipcMain.handle('init-engine', async () => {
     return await startAivisEngine();
@@ -135,7 +60,7 @@ ipcMain.handle('restart-engine', async () => {
 });
 
 // 音声保存処理
-ipcMain.handle('save-audio', async (event, arrayBufferArray, defaultFilename = 'xVoice生成.mp3') => {
+ipcMain.handle('generate-audio', async (event, arrayBufferArray, defaultFilename = 'xVoice生成.mp3') => {
     const { filePath } = await dialog.showSaveDialog({
         title: '全文MP3ファイルを保存',
         defaultPath: defaultFilename || 'xVoice生成.mp3',
@@ -175,7 +100,7 @@ ipcMain.handle('save-audio', async (event, arrayBufferArray, defaultFilename = '
 
         return true;
     } catch (err) {
-        console.error('MP3 Save Error:', err);
+        console.error('MP3 Generate Error:', err);
         return false;
     } finally {
         if (fs.existsSync(tempWavPath)) {
@@ -184,24 +109,7 @@ ipcMain.handle('save-audio', async (event, arrayBufferArray, defaultFilename = '
     }
 });
 
-// --- アプリ初期化 ＆ 終了処理 ---
-app.whenReady().then(createWindow);
-
-// アプリ終了処理
-app.on('will-quit', async (event) => {
-    // 本アプリによって起動された場合のみエンジンを終了
-    if (isEngineSpawnedByApp) {
-        event.preventDefault();
-        await stopAivisEngine();
-        process.exit(0);
-    }
-});
-
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
-});
-
-// --- ファイル選択ダイアログを表示するIPCハンドラー ---
+// ファイル選択ダイアログを表示するIPCハンドラー
 ipcMain.handle('select-file', async () => {
     const result = await dialog.showOpenDialog({
         properties: ['openFile'],
@@ -218,7 +126,106 @@ ipcMain.handle('select-file', async () => {
     return readTextFile(result.filePaths[0]);
 });
 
-// --- 指定されたパスのファイルを直接読み込むIPCハンドラー ---
+// 指定されたパスのファイルを直接読み込むIPCハンドラー
 ipcMain.handle('read-file-by-path', async (event, filePath) => {
     return readTextFile(filePath);
 });
+
+// 🔲共通ヘルパー関数🔲
+// window生成
+function createWindow() {
+    mainWindow = new BrowserWindow({
+        width: 1280,
+        height: 720,
+        title: 'xVoice -テキスト読み上げ-',
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            webSecurity: true,
+            sandbox: false
+        },
+        icon: path.join(__dirname, 'xVoice.ico'),
+        autoHideMenuBar: true,
+        show: false // ちらつき防止
+    });
+
+    mainWindow.loadFile('index.html');
+    mainWindow.maximize();
+
+    mainWindow.once('ready-to-show', () => {
+        mainWindow.show();
+    });
+
+    return mainWindow;
+}
+
+// Engineのヘルスチェック (起動完了待ち) 
+function checkEngineHealth() {
+    return new Promise((resolve) => {
+        http.get(`${AIVIS_HOST}/version`, (res) => {
+            resolve(res.statusCode === 200);
+        }).on('error', () => {
+            resolve(false);
+        });
+    });
+}
+
+// Engine起動状態確認＆起動処理
+async function startAivisEngine() {
+    const isRunning = await checkEngineHealth();
+    if (isRunning) {
+        if (mainWindow) mainWindow.webContents.send('engine-progress-update', { current: 60, total: 60, isRunning: true });
+        // 既に外部等で起動済みの場合は自前起動フラグを立てない
+        return true;
+    }
+
+    // run.exe 起動
+    spawn(ENGINE_EXE, ['--host', '0.0.0.0', '--port', '10101', '--load_all_models'], {
+        cwd: ENGINE_PATH,
+        detached: true,
+        stdio: 'ignore'
+    }).unref();
+
+    // 本アプリで起動したためフラグを有効化
+    isEngineSpawnedByApp = true;
+
+    const maxTries = 60;
+    for (let i = 1; i <= maxTries; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+
+        // 進捗状況を画面に送出
+        if (mainWindow) {
+            mainWindow.webContents.send('engine-progress-update', { current: i, total: maxTries, isRunning: false });
+        }
+
+        if (await checkEngineHealth()) {
+            if (mainWindow) {
+                mainWindow.webContents.send('engine-progress-update', { current: maxTries, total: maxTries, isRunning: true });
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+// Engine停止処理 (taskkill) 
+function stopAivisEngine() {
+    return new Promise((resolve) => {
+        exec(`taskkill /F /IM ${ENGINE_EXE}`, () => {
+            isEngineSpawnedByApp = false; // 停止完了後にフラグをリセット
+            resolve(true);
+        });
+    });
+}
+
+// ファイル読み込みの共通処理
+function readTextFile(filePath) {
+    try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        return { path: filePath, content: content };
+    } catch (err) {
+        console.error('File Read Error:', err);
+        return null;
+    }
+}

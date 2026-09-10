@@ -1,39 +1,11 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.10.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.11.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
-    const btnTheme = document.getElementById('btn-theme');
-    const speakerSelect = document.getElementById('speaker');
-    const btnRestart = document.getElementById('btn-restart');
-    const btnFileSelect = document.getElementById('btn-file-select');
-    const filePathDisplay = document.getElementById('file-path-display');
-    const textInput = document.getElementById('text');
-    const fontSizeSelect = document.getElementById('font-size-select');
-    const btnFileClear = document.getElementById('btn-file-clear');
-    const btnSpeak = document.getElementById('btn-speak');
-    const btnSave = document.getElementById('btn-save');
-    const audioPlayer = document.getElementById('audio-player');
-    const statusDiv = document.getElementById('status');
-    const engineProgressBar = document.getElementById('engine-progress');
-    const textProgressBar = document.getElementById('text-progress');
-    const mp3ProgressBar = document.getElementById('mp3-progress');
-    const textElem = document.getElementById('text');
-    const writingModeSelect = document.getElementById('writing-mode-select');
-
+    // 🔲イミディエイト定義🔲
     const AIVIS_HOST = 'http://127.0.0.1:10101';
-
-    let isPlaying = false;
-    let isStopped = false;
-    let isLineJumped = false;  // 再生中の行ジャンプ用フラグ
-    let currentLineIndex = 0;  // 再開位置を保持する行インデックス
-    let previousText = '';      // テキスト内容の変更検知用
-    let isFirstPlay = true;     // 起動後/読み込み後の初回再生判定フラグ
-    let isSaving = false;
-    let isSaveCanceled = false;
-    let isEngineReady = false; // エラー時の状態判定用
-
     // --- localStorage保存・復元用キー定数 ---
     const STORAGE_KEYS = {
         FILE_PATH: 'xVoice_filePath',
@@ -45,6 +17,85 @@ document.addEventListener('DOMContentLoaded', async () => {
         TEXT_DIRECTION: 'xVoice_textDirection'
     };
 
+    // 🔲DOM定義🔲
+    let btnTheme = null;
+    let speakerSelect = null;
+    let btnRestart = null;
+    let btnFileSelect = null;
+    let filePathDisplay = null;
+    let textInput = null;
+    let fontSizeSelect = null;
+    let btnFileClear = null;
+    let btnSpeak = null;
+    let btnGenerate = null;
+    let audioPlayer = null;
+    let statusDiv = null;
+    let engineProgressBar = null;
+    let textProgressBar = null;
+    let mp3ProgressBar = null;
+    let textElem = null;
+    let writingModeSelect = null;
+
+    // 🔲グローバル変数定義🔲
+    let isPlaying = false;
+    let isStopped = false;
+    let isLineJumped = false;  // 再生中の行ジャンプ用フラグ
+    let currentLineIndex = 0;  // 再開位置を保持する行インデックス
+    let previousText = '';      // テキスト内容の変更検知用
+    let isGenerating = false;
+    let isGenerateCanceled = false;
+    let isEngineReady = false; // エラー時の状態判定用
+
+    // 🔲初期設定🔲
+    setupAllDomSettings();
+
+    // --- 設定の復元ロジック ---
+    if (audioPlayer) {
+        const savedVolume = localStorage.getItem(STORAGE_KEYS.VOLUME);
+        audioPlayer.volume = savedVolume !== null ? parseFloat(savedVolume) : 0.2;
+
+        audioPlayer.addEventListener('volumechange', () => {
+            localStorage.setItem(STORAGE_KEYS.VOLUME, audioPlayer.volume);
+        });
+    }
+    
+    // フォントサイズ選択の復元
+    const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
+    applyFontSize(savedFontSize);
+
+    // ファイルパスの復元
+    const savedFilePath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
+    if (savedFilePath) {
+        filePathDisplay.textContent = savedFilePath;
+        updateFilePathMarquee();
+    }
+
+    // テキストの復元
+    const savedText = localStorage.getItem(STORAGE_KEYS.TEXT);
+    if (savedText !== null) {
+        const normalizedSavedText = savedText.replace(/\r\n/g, '\n');
+        textInput.value = normalizedSavedText;
+        previousText = normalizedSavedText;
+    }
+
+    // 再生位置の復元
+    const savedLineIndex = localStorage.getItem(STORAGE_KEYS.LINE_INDEX);
+    if (savedLineIndex !== null) {
+        currentLineIndex = parseInt(savedLineIndex, 10) || 0;
+    }
+
+    // テキスト表示向きの復元
+    const savedTextDirection = localStorage.getItem(STORAGE_KEYS.TEXT_DIRECTION) || 'horizontal-tb';
+    applyTextDirection(savedTextDirection);
+
+    // テーマ設定の復元
+    setTheme(localStorage.getItem('theme') || 'dark');
+
+    // アプリ初期化実行
+    initApp();
+
+    // 🔲window イベントリスナー登録🔲
+    // windowのサイズ変更イベント
     window.addEventListener('resize', () => {
         updateFilePathMarquee();
         if (textInput) {
@@ -56,6 +107,235 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // 🔲個別イベントリスナー登録🔲
+    // 話者モデルの選択変更イベント
+    speakerSelect?.addEventListener('change', (e) => {
+        localStorage.setItem(STORAGE_KEYS.SPEAKER, e.target.value);
+    });
+
+    // フォントサイズ変更イベント
+    if (fontSizeSelect) {
+        fontSizeSelect.addEventListener('change', (e) => {
+            applyFontSize(e.target.value);
+        });
+    }
+
+    // テキスト表示向きの変更イベント
+    writingModeSelect?.addEventListener('change', (e) => {
+        applyTextDirection(e.target.value);
+    });
+
+    // テーマ設定のクリックイベント
+    btnTheme?.addEventListener('click', () => {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+    });
+
+    // ファイル選択のクリックイベント
+    textInput?.addEventListener('click', handleCursorChange);
+
+    // ファイル選択のキーアップイベント
+    textInput?.addEventListener('keyup', (e) => {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
+            handleCursorChange();
+        }
+    });
+
+    // ファイル選択のクリックイベント
+    btnFileSelect?.addEventListener('click', async () => {
+        const fileData = await window.api.selectFile();
+        if (!fileData) return; // キャンセル時
+
+        loadFileContent(fileData.path, fileData.content);
+    });
+
+    // Ｄ＆Ｄのドラッグオーバーイベント
+    document.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isPlaying) return;
+        document.body.classList.add('drag-over');
+    });
+
+    // Ｄ＆Ｄのドラッグリーヴイベント
+    document.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.clientX === 0 && e.clientY === 0) {
+            document.body.classList.remove('drag-over');
+        }
+    });
+
+    // Ｄ＆Ｄのドロップイベント
+    document.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        document.body.classList.remove('drag-over');
+
+        if (isPlaying) return;
+
+        const files = e.dataTransfer?.files;
+        if (!files || files.length === 0) return;
+
+        const droppedFile = files[0];
+        const filePath = droppedFile.path || (window.api.getFilePath ? window.api.getFilePath(droppedFile) : '');
+
+        if (filePath) {
+            try {
+                const fileData = await window.api.readFileByPath(filePath);
+                if (fileData) {
+                    loadFileContent(fileData.path, fileData.content);
+                }
+            } catch (err) {
+                console.error('D&D ファイル読み込みエラー:', err);
+                statusDiv.textContent = 'ファイルの読み込みに失敗しました';
+            }
+        }
+    });
+
+    // クリアボタンのクリックイベント
+    btnFileClear?.addEventListener('click', () => {
+        filePathDisplay.textContent = '選択されていません';
+        updateFilePathMarquee();
+        if (textInput) textInput.value = '';
+        if (btnGenerate) btnGenerate.disabled = true;
+
+        currentLineIndex = 0;
+        previousText = '';
+        isFirstPlay = true;
+
+        localStorage.removeItem(STORAGE_KEYS.FILE_PATH);
+        localStorage.removeItem(STORAGE_KEYS.TEXT);
+        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+    });
+
+    // テキストの入力イベント
+    textInput?.addEventListener('input', () => {
+        const currentText = textInput.value.replace(/\r\n/g, '\n');
+        if (btnGenerate && !isGenerating) {
+            btnGenerate.disabled = !isEngineReady || !currentText.trim();
+        }
+        
+        if (currentText !== previousText) {
+            currentLineIndex = 0;
+            previousText = currentText;
+            isFirstPlay = true;
+            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+        }
+
+        localStorage.setItem(STORAGE_KEYS.TEXT, currentText);
+    });
+
+    // エンジン再起動のクリックイベント
+    btnRestart?.addEventListener('click', async () => {
+        statusDiv.textContent = 'AivisSpeech Engine 再起動中...';
+        isEngineReady = false;
+        btnSpeak.disabled = true;
+        btnGenerate.disabled = true; // ★再起動中も非活性化
+        btnRestart.disabled = true;
+
+        const ready = await window.api.restartEngine();
+        if (ready) {
+            await loadSpeakers();
+            isEngineReady = true;
+            btnSpeak.disabled = false;
+            btnGenerate.disabled = !textInput.value.trim();
+        } else {
+            statusDiv.textContent = 'Engineの再起動に失敗しました';
+        }
+        btnRestart.disabled = false;
+    });
+
+    // 再生 / 停止のクリックイベント
+    btnSpeak?.addEventListener('click', () => {
+        if (isPlaying) {
+            stopPlayback();
+        } else {
+            playLineByLine();
+        }
+    });
+
+    // 「🔊 生成」 / 「❌ 中止」 クリックイベント
+    btnGenerate?.addEventListener('click', () => {
+        if (isGenerating) {
+            // 保存中にクリックされた場合はキャンセルフラグを立てる
+            isGenerateCanceled = true;
+            btnGenerate.disabled = true; // 二重クリック防止
+        } else {
+            // 通常時は保存処理を実行
+            generateFullTextMp3();
+        }
+    });
+
+    // 🔲コールバック処理🔲
+    // エンジン起動進捗受信
+    window.api.onEngineProgress(({ current, total, isRunning }) => {
+        if (engineProgressBar) {
+            showProgressBar('engine');
+
+            const percent = Math.round((current / total) * 100);
+            engineProgressBar.value = percent;
+
+            if (isRunning) {
+                isEngineReady = true;
+                statusDiv.textContent = 'AivisSpeech Engine の起動が完了しました';
+                // ★エンジン起動完了に伴いボタンが「🔊 生成」であることを確認して活性化
+                if (btnGenerate && !isGenerating) {
+                    btnGenerate.disabled = !textInput.value.trim();
+                }
+                setTimeout(() => { engineProgressBar.hidden = true; }, 1000);
+            } else {
+                isEngineReady = false;
+                if (btnGenerate) btnGenerate.disabled = true; // 起動中は非活性
+                statusDiv.textContent = `AivisSpeech Engine 起動確認中... (${current}/${total} - ${percent}%)`;
+            }
+        }
+    });
+
+    // 🔲初期設定関数🔲
+    function setupAllDomSettings() {
+        btnTheme = document.getElementById('btn-theme');
+        speakerSelect = document.getElementById('speaker');
+        btnRestart = document.getElementById('btn-restart');
+        btnFileSelect = document.getElementById('btn-file-select');
+        filePathDisplay = document.getElementById('file-path-display');
+        textInput = document.getElementById('text');
+        fontSizeSelect = document.getElementById('font-size-select');
+        btnFileClear = document.getElementById('btn-file-clear');
+        btnSpeak = document.getElementById('btn-speak');
+        btnGenerate = document.getElementById('btn-generate');
+        audioPlayer = document.getElementById('audio-player');
+        statusDiv = document.getElementById('status');
+        engineProgressBar = document.getElementById('engine-progress');
+        textProgressBar = document.getElementById('text-progress');
+        mp3ProgressBar = document.getElementById('mp3-progress');
+        textElem = document.getElementById('text');
+        writingModeSelect = document.getElementById('writing-mode-select');
+    }
+
+    // Engine 初期化 & 再起動制御
+    async function initApp() {
+        statusDiv.textContent = 'AivisSpeech Engine 起動中...';
+        isEngineReady = false;
+        btnSpeak.disabled = true;
+        btnGenerate.disabled = true; // ★起動完了まで非活性化
+        if (btnRestart) btnRestart.disabled = true;
+
+        const ready = await window.api.initEngine();
+        if (ready) {
+            await loadSpeakers();
+            isEngineReady = true;
+            btnSpeak.disabled = false;
+            btnGenerate.disabled = !textInput.value.trim(); // ★起動完了後にテキスト判定で有効化
+        } else {
+            statusDiv.textContent = 'Engineの起動に失敗しました';
+        }
+        if (btnRestart) btnRestart.disabled = false;
+
+        moveCursorToLineStart(currentLineIndex, true);
+    }
+
+    // 🔲共通ヘルパー関数🔲
     // --- 指定行の先頭にカーソルを移動しスクロール表示する共通関数 ---
     function moveCursorToLineStart(lineIndex, highlight = isPlaying) {
         if (!textInput) return;
@@ -193,59 +473,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // --- 設定の復元ロジック ---
-    if (audioPlayer) {
-        const savedVolume = localStorage.getItem(STORAGE_KEYS.VOLUME);
-        audioPlayer.volume = savedVolume !== null ? parseFloat(savedVolume) : 0.2;
-
-        audioPlayer.addEventListener('volumechange', () => {
-            localStorage.setItem(STORAGE_KEYS.VOLUME, audioPlayer.volume);
-        });
-    }
-    
-    const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
-    applyFontSize(savedFontSize);
-
-    const savedFilePath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
-    if (savedFilePath) {
-        filePathDisplay.textContent = savedFilePath;
-        updateFilePathMarquee();
-    }
-
-    const savedText = localStorage.getItem(STORAGE_KEYS.TEXT);
-    if (savedText !== null) {
-        const normalizedSavedText = savedText.replace(/\r\n/g, '\n');
-        textInput.value = normalizedSavedText;
-        previousText = normalizedSavedText;
-    }
-
-    const savedLineIndex = localStorage.getItem(STORAGE_KEYS.LINE_INDEX);
-    if (savedLineIndex !== null) {
-        currentLineIndex = parseInt(savedLineIndex, 10) || 0;
-    }
-
-    // --- 話者モデルの選択変更リスナー ---
-    speakerSelect?.addEventListener('change', (e) => {
-        localStorage.setItem(STORAGE_KEYS.SPEAKER, e.target.value);
-    });
-
-    // --- テキストの表示向き設定・適用処理 ---
+    // テキストの表示向き設定・適用処理
     function applyTextDirection(direction) {
         if (!textInput) return;
-
+    
+        // 1. スタイルの直接適用とUI状態更新
         textInput.style.writingMode = direction;
         if (writingModeSelect) writingModeSelect.value = direction;
         localStorage.setItem(STORAGE_KEYS.TEXT_DIRECTION, direction);
+    
+        // 2. CSSクラスの切り替え（is-vertical のON/OFF）
+        if (textElem) {
+            textElem.classList.toggle('is-vertical', direction === 'vertical-rl');
+        }
     }
 
-    const savedTextDirection = localStorage.getItem(STORAGE_KEYS.TEXT_DIRECTION) || 'horizontal-tb';
-    applyTextDirection(savedTextDirection);
-
-    writingModeSelect?.addEventListener('change', (e) => {
-        applyTextDirection(e.target.value);
-    });
-
-    // --- フォントサイズの適用・変更処理 ---
+    // フォントサイズの適用・変更処理
     function applyFontSize(size) {
         if (!textInput) return;
 
@@ -277,45 +520,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // フォントサイズ変更イベント処理
-    if (fontSizeSelect) {
-        fontSizeSelect.addEventListener('change', (e) => {
-            applyFontSize(e.target.value);
-        });
-    }
-
-    // 縦書き・横書き切替イベント処理
-    if (writingModeSelect && textElem) {
-        writingModeSelect.addEventListener('change', (e) => {
-            if (e.target.value === 'vertical-rl') {
-                textElem.classList.add('is-vertical');
-            } else {
-                textElem.classList.remove('is-vertical');
-            }
-        });
-    }
-
-    // --- 進捗バー表示切り替えヘルパー ---
+    // 進捗バー表示切り替えヘルパー
     function showProgressBar(type) {
         if (engineProgressBar) engineProgressBar.hidden = (type !== 'engine');
         if (textProgressBar) textProgressBar.hidden = (type !== 'text');
         if (mp3ProgressBar) mp3ProgressBar.hidden = (type !== 'mp3');
     }
 
-    // --- テーマ設定 ---
+    // テーマ設定
     function setTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('theme', theme);
         if (btnTheme) btnTheme.textContent = theme === 'dark' ? '☀️' : '🌙';
     }
-    setTheme(localStorage.getItem('theme') || 'dark');
 
-    btnTheme?.addEventListener('click', () => {
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        setTheme(currentTheme === 'dark' ? 'light' : 'dark');
-    });
-
-    // --- 現在のカーソル位置から行インデックスを取得する関数 ---
+    // 現在のカーソル位置から行インデックスを取得する関数
     function getCursorLineIndex() {
         if (!textInput) return 0;
         const fullText = textInput.value.replace(/\r\n/g, '\n');
@@ -324,7 +543,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return (textUpToCursor.match(/\n/g) || []).length;
     }
 
-    // --- 再生中のカーソル移動（クリック／キー操作）の監視 ---
+    // 再生中のカーソル移動（クリック／キー操作）の監視
     function handleCursorChange() {
         if (!isPlaying) return;
 
@@ -341,14 +560,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    textInput?.addEventListener('click', handleCursorChange);
-    textInput?.addEventListener('keyup', (e) => {
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
-            handleCursorChange();
-        }
-    });
-
-    // --- ファイル読み込み後の共通処理関数 ---
+    // ファイル読み込み後の共通処理関数
     function loadFileContent(path, content) {
         const loadedText = (content || '').replace(/\r\n/g, '\n');
 
@@ -365,76 +577,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.setItem(STORAGE_KEYS.TEXT, loadedText);
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
 
-        if (btnSave) btnSave.disabled = !textInput.value.trim();
+        if (btnGenerate) btnGenerate.disabled = !textInput.value.trim();
 
         moveCursorToLineStart(0);
     }
-
-    // --- ファイル選択ボタン処理 ---
-    btnFileSelect?.addEventListener('click', async () => {
-        const fileData = await window.api.selectFile();
-        if (!fileData) return; // キャンセル時
-
-        loadFileContent(fileData.path, fileData.content);
-    });
-
-    // --- ドラッグ＆ドロップ（D&D）処理 ---
-    document.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (isPlaying) return;
-        document.body.classList.add('drag-over');
-    });
-
-    document.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.clientX === 0 && e.clientY === 0) {
-            document.body.classList.remove('drag-over');
-        }
-    });
-
-    document.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        document.body.classList.remove('drag-over');
-
-        if (isPlaying) return;
-
-        const files = e.dataTransfer?.files;
-        if (!files || files.length === 0) return;
-
-        const droppedFile = files[0];
-        const filePath = droppedFile.path || (window.api.getFilePath ? window.api.getFilePath(droppedFile) : '');
-
-        if (filePath) {
-            try {
-                const fileData = await window.api.readFileByPath(filePath);
-                if (fileData) {
-                    loadFileContent(fileData.path, fileData.content);
-                }
-            } catch (err) {
-                console.error('D&D ファイル読み込みエラー:', err);
-                statusDiv.textContent = 'ファイルの読み込みに失敗しました';
-            }
-        }
-    });
-
-    // クリアボタンのクリックイベント
-    btnFileClear?.addEventListener('click', () => {
-        filePathDisplay.textContent = '選択されていません';
-        updateFilePathMarquee();
-        if (textInput) textInput.value = '';
-        if (btnSave) btnSave.disabled = true;
-
-        currentLineIndex = 0;
-        previousText = '';
-        isFirstPlay = true;
-
-        localStorage.removeItem(STORAGE_KEYS.FILE_PATH);
-        localStorage.removeItem(STORAGE_KEYS.TEXT);
-        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
-    });
 
     // --- ボタンおよび入力要素の状態管理 ---
     function updateButtonStates(playing) {
@@ -446,24 +592,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // 保存実行中でなければ再生状態に応じて非活性を制御
-        if (btnSave && !isSaving) {
-            btnSave.disabled = playing || !isEngineReady || !textInput.value.trim();
+        if (btnGenerate && !isGenerating) {
+            btnGenerate.disabled = playing || !isEngineReady || !textInput.value.trim();
         }
-        if (btnFileClear) btnFileClear.disabled = playing || isSaving;
+        if (btnFileClear) btnFileClear.disabled = playing || isGenerating;
     
-        if (btnFileSelect) btnFileSelect.disabled = playing || isSaving;
-        if (fontSizeSelect) fontSizeSelect.disabled = playing || isSaving;
-        if (writingModeSelect) writingModeSelect.disabled = playing || isSaving;
-        if (textInput) textInput.readOnly = playing || isSaving;
+        if (btnFileSelect) btnFileSelect.disabled = playing || isGenerating;
+        if (fontSizeSelect) fontSizeSelect.disabled = playing || isGenerating;
+        if (writingModeSelect) writingModeSelect.disabled = playing || isGenerating;
+        if (textInput) textInput.readOnly = playing || isGenerating;
     }
 
-    // ★追加: 保存ボタンの表示・状態を初期化するヘルパー関数
-    function resetSaveButton() {
-        isSaving = false;
-        isSaveCanceled = false;
-        if (btnSave) {
-            btnSave.textContent = '🔊 生成';
-            btnSave.disabled = !isEngineReady || !textInput.value.trim();
+    // 保存ボタンの表示・状態を初期化するヘルパー関数
+    function resetGenerateButton() {
+        isGenerating = false;
+        isGenerateCanceled = false;
+        if (btnGenerate) {
+            btnGenerate.textContent = '🔊 生成';
+            btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
         }
         btnSpeak.disabled = false;
         if (btnFileSelect) btnFileSelect.disabled = false;
@@ -473,24 +619,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (textInput) textInput.readOnly = false;
     }
 
-    // テキスト編集時
-    textInput?.addEventListener('input', () => {
-        const currentText = textInput.value.replace(/\r\n/g, '\n');
-        if (btnSave && !isSaving) {
-            btnSave.disabled = !isEngineReady || !currentText.trim();
-        }
-        
-        if (currentText !== previousText) {
-            currentLineIndex = 0;
-            previousText = currentText;
-            isFirstPlay = true;
-            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
-        }
-
-        localStorage.setItem(STORAGE_KEYS.TEXT, currentText);
-    });
-
-    // --- 話者一覧取得 ---
+    // 話者一覧取得
     async function loadSpeakers() {
         try {
             const res = await fetch(`${AIVIS_HOST}/speakers`);
@@ -523,72 +652,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // --- Engine 初期化 & 再起動制御 ---
-    async function initApp() {
-        statusDiv.textContent = 'AivisSpeech Engine 起動中...';
-        isEngineReady = false;
-        btnSpeak.disabled = true;
-        btnSave.disabled = true; // ★起動完了まで非活性化
-        if (btnRestart) btnRestart.disabled = true;
-
-        const ready = await window.api.initEngine();
-        if (ready) {
-            await loadSpeakers();
-            isEngineReady = true;
-            btnSpeak.disabled = false;
-            btnSave.disabled = !textInput.value.trim(); // ★起動完了後にテキスト判定で有効化
-        } else {
-            statusDiv.textContent = 'Engineの起動に失敗しました';
-        }
-        if (btnRestart) btnRestart.disabled = false;
-
-        moveCursorToLineStart(currentLineIndex, true);
-    }
-
-    btnRestart?.addEventListener('click', async () => {
-        statusDiv.textContent = 'AivisSpeech Engine 再起動中...';
-        isEngineReady = false;
-        btnSpeak.disabled = true;
-        btnSave.disabled = true; // ★再起動中も非活性化
-        btnRestart.disabled = true;
-
-        const ready = await window.api.restartEngine();
-        if (ready) {
-            await loadSpeakers();
-            isEngineReady = true;
-            btnSpeak.disabled = false;
-            btnSave.disabled = !textInput.value.trim();
-        } else {
-            statusDiv.textContent = 'Engineの再起動に失敗しました';
-        }
-        btnRestart.disabled = false;
-    });
-
-    // --- エンジン起動進捗受信 ---
-    window.api.onEngineProgress(({ current, total, isRunning }) => {
-        if (engineProgressBar) {
-            showProgressBar('engine');
-
-            const percent = Math.round((current / total) * 100);
-            engineProgressBar.value = percent;
-
-            if (isRunning) {
-                isEngineReady = true;
-                statusDiv.textContent = 'AivisSpeech Engine の起動が完了しました';
-                // ★エンジン起動完了に伴いボタンが「🔊 生成」であることを確認して活性化
-                if (btnSave && !isSaving) {
-                    btnSave.disabled = !textInput.value.trim();
-                }
-                setTimeout(() => { engineProgressBar.hidden = true; }, 1000);
-            } else {
-                isEngineReady = false;
-                if (btnSave) btnSave.disabled = true; // 起動中は非活性
-                statusDiv.textContent = `AivisSpeech Engine 起動確認中... (${current}/${total} - ${percent}%)`;
-            }
-        }
-    });
-
-    // --- 音声生成ロジック ---
+    // 音声生成ロジック
     async function fetchAudioBuffer(text, speakerId) {
         // 変換ルビの置換処理
         // {元語句|読み} または ｛元語句｜読み｝ の形式に対応
@@ -625,7 +689,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         moveCursorToLineStart(currentLineIndex, true);
     }
 
-    // --- 1. 「1行毎に合成・再生（ハイライト＋自動スクロール付き）」処理 ---
+    // 「1行毎に合成・再生（ハイライト＋自動スクロール付き）」処理
     async function playLineByLine() {
         const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.split('\n');
@@ -634,14 +698,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     
         const normalizedPreviousText = previousText.replace(/\r\n/g, '\n');
     
+        // テキスト内容が変更された場合のみ先頭（0行目）から再生
         if (normalizedPreviousText !== '' && fullText !== normalizedPreviousText) {
             currentLineIndex = 0;
             isFirstPlay = true;
-            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
-        } else if (!isFirstPlay) {
+        } else {
+            // 停止中・初回再生前に移動されたカーソル位置を確実に取得
             currentLineIndex = getCursorLineIndex();
-            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
         }
+        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
     
         previousText = fullText;
         isFirstPlay = false;
@@ -659,10 +724,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (textProgressBar) {
             textProgressBar.value = Math.round((currentLineIndex / lines.length) * 100);
         }
-    
-        const computedStyle = window.getComputedStyle(textInput);
-        const parsedLineHeight = parseFloat(computedStyle.lineHeight);
-        const lineHeight = isNaN(parsedLineHeight) ? 20 : parsedLineHeight;
     
         while (currentLineIndex < lines.length) {
             if (isStopped) break;
@@ -751,20 +812,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateButtonStates(false);
     }
 
-    // --- 2. 「全文MP3保存（進捗バー更新付き）」処理 ---
-    async function saveFullTextMp3() {
+    // 「全文MP3保存（進捗バー更新付き）」処理
+    async function generateFullTextMp3() {
         const lines = textInput.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const speakerId = speakerSelect.value;
 
         if (lines.length === 0) return alert('テキストを入力してください');
 
         // ★保存中状態へ移行
-        isSaving = true;
-        isSaveCanceled = false;
+        isGenerating = true;
+        isGenerateCanceled = false;
 
         // ★ボタンを「❌ 中止」に変更
-        btnSave.textContent = '❌ 中止';
-        btnSave.disabled = false;
+        btnGenerate.textContent = '❌ 中止';
+        btnGenerate.disabled = false;
         btnSpeak.disabled = true;
         if (btnFileSelect) btnFileSelect.disabled = true;
         if (btnFileClear) btnFileClear.disabled = true;
@@ -780,7 +841,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             for (let i = 0; i < lines.length; i++) {
                 // ★ループごとにキャンセルフラグを確認
-                if (isSaveCanceled) {
+                if (isGenerateCanceled) {
                     statusDiv.textContent = '保存処理を中止しました';
                     return;
                 }
@@ -793,7 +854,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const buffer = await fetchAudioBuffer(lines[i], speakerId);
 
                 // API通信待機後のキャンセル確認
-                if (isSaveCanceled) {
+                if (isGenerateCanceled) {
                     statusDiv.textContent = '保存処理を中止しました';
                     return;
                 }
@@ -804,21 +865,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             statusDiv.textContent = 'MP3へ変換・保存中...';
 
             let defaultFilename = 'xVoice生成.mp3';
-            const savedPath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
-            if (savedPath && savedPath !== '選択されていません') {
-                const parts = savedPath.split(/[/\\]/);
+            const generatedPath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
+            if (generatedPath && generatedPath !== '選択されていません') {
+                const parts = generatedPath.split(/[/\\]/);
                 const originalName = parts[parts.length - 1];
                 const baseName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
                 defaultFilename = `${baseName}.mp3`;
             }
 
             // MP3変換・書き込み前に最終キャンセル判定
-            if (isSaveCanceled) {
+            if (isGenerateCanceled) {
                 statusDiv.textContent = '保存処理を中止しました';
                 return;
             }
 
-            const success = await window.api.saveAudio(audioBuffers, defaultFilename);
+            const success = await window.api.generateAudio(audioBuffers, defaultFilename);
             statusDiv.textContent = success ? '全文MP3保存が完了しました' : '保存がキャンセルまたは失敗しました';
 
         } catch (err) {
@@ -826,7 +887,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error(err);
         } finally {
             // ★保存完了または中止時、常にボタン表示・状態を初期状態に戻す
-            resetSaveButton();
+            resetGenerateButton();
 
             setTimeout(() => {
                 if (mp3ProgressBar) mp3ProgressBar.hidden = true;
@@ -834,31 +895,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 再生 / 停止 トグルイベントリスナー
-    btnSpeak?.addEventListener('click', () => {
-        if (isPlaying) {
-            stopPlayback();
-        } else {
-            playLineByLine();
-        }
-    });
-
-    // ★「🔊 生成」 / 「❌ 中止」 クリック時の分岐処理
-    btnSave?.addEventListener('click', () => {
-        if (isSaving) {
-            // 保存中にクリックされた場合はキャンセルフラグを立てる
-            isSaveCanceled = true;
-            btnSave.disabled = true; // 二重クリック防止
-        } else {
-            // 通常時は保存処理を実行
-            saveFullTextMp3();
-        }
-    });
-
-    // アプリ初期化実行
-    initApp();
-
-    // --- file-path-display のはみ出しチェックとスクロール適用関数 ---
+    // file-path-display のはみ出しチェックとスクロール適用関数
     function updateFilePathMarquee() {
         if (!filePathDisplay) return;
 
