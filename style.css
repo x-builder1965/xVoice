@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.12.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.13.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -138,7 +138,8 @@ label {
     font-size: 0.9rem;
 }
 
-select, input[type="file"] {
+/* テキスト入力・セレクト・ファイル選択共通スタイル */
+select, input[type="file"], input[type="text"] {
     width: 100%;
     padding: 5px 8px;
     box-sizing: border-box;
@@ -147,6 +148,25 @@ select, input[type="file"] {
     border: 1px solid var(--border-color);
     border-radius: 6px;
     outline: none;
+    transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+}
+
+/* サーバーアドレス入力欄固有の設定 */
+#input-address {
+    flex: 1 1 200px;
+    min-width: 200px;
+    font-family: monospace, system-ui;
+    font-size: 0.85rem;
+}
+
+#input-address:focus {
+    border-color: var(--primary-color);
+}
+
+/* プレースホルダー色調整（テーマ連動） */
+#input-address::placeholder {
+    color: var(--status-color);
+    opacity: 0.7;
 }
 
 /* テキストエリア基本スタイル */
@@ -370,7 +390,8 @@ textarea {
     box-sizing: border-box;
 }
 
-input[type="file"]:disabled {
+input[type="file"]:disabled,
+input[type="text"]:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     filter: grayscale(30%);
@@ -382,15 +403,32 @@ input[type="file"]:disabled {
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background-color: rgba(112, 20, 20, 0.9);
     color: #fff;
     padding: 10px 20px;
     border-radius: 6px;
     font-size: 20px;
-    box-shadow: 0 4px 12px rgba(88, 6, 6, 0.726);
     z-index: 9999;
     transition: opacity 0.3s ease, transform 0.3s ease;
     pointer-events: none; /* 下の要素の操作を邪魔しない */
+}
+
+/* メッセージタイプ別スタイル */
+/* ℹ️ info (青) */
+.toast.toast-info {
+    background-color: rgba(20, 80, 160, 0.95);
+    box-shadow: 0 4px 12px rgba(10, 40, 90, 0.7);
+}
+
+/* ⚠️ warning (黄) */
+.toast.toast-warning {
+    background-color: rgba(210, 140, 10, 0.466);
+    box-shadow: 0 4px 12px rgba(100, 70, 5, 0.7);
+}
+
+/* 🚫 error (赤) */
+.toast.toast-error {
+    background-color: rgba(180, 20, 20, 0.95);
+    box-shadow: 0 4px 12px rgba(90, 10, 10, 0.7);
 }
 
 /* 非表示状態 */

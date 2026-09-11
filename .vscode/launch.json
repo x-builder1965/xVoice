@@ -27,7 +27,7 @@
       "webRoot": "${workspaceFolder}",     // または "${workspaceFolder}/src" などRendererのルートに
       "timeout": 60000,                    // 起動遅延対策で長めに
       "sourceMaps": true,
-      "trace": true                        // 接続エラー時に便利
+      "trace": true                       // 接続エラー時に便利
     }
   ],
   "compounds": [

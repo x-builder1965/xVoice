@@ -1,9 +1,10 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.12.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.13.0';
  ---------------------------------------------------------------------
  【変更履歴】
+ 2026-09-11 Ver1.13.0 エンジン接続アドレス追加と接続条件の見直し。
  2026-09-10 Ver1.12.0 テキスト保存機能の追加。
  2026-09-10 Ver1.11.0 イベント・関数の見直し整理。
  2026-09-10 Ver1.10.0 テキスト音声生成時の変換ルビの対応。
@@ -31,7 +32,7 @@
         <div class="header">
             <h1 class="app-title">
                 <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
-                xVoice -テキスト音声読み上げ- Ver1.10.0
+                xVoice -テキスト音声読み上げ- Ver1.12.0
             </h1>
             <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替">☀️</button>
         </div>
@@ -39,10 +40,12 @@
         <!-- トースト通知用オーバーレイ -->
         <div id="toast-message" class="toast hidden"></div>
         
+        <!-- サーバー接続および話者選択フィールド -->
         <div class="field">
             <div class="file-input-group">
                 <select id="speaker"><option value="">エンジン起動確認中...</option></select>
-                <button id="btn-restart" class="file-select-btn" type="button">🔄 再起動</button>
+                <button id="btn-connect" class="file-select-btn" type="button">🔄 接続</button>
+                <input type="text" id="input-address" placeholder="http://127.0.0.1:10101" title="サーバーアドレス">
             </div>
         </div>
 
@@ -61,9 +64,9 @@
                 </select>
                 <button id="btn-file-select" class="btn-primary">📁 ファイル選択</button>
                 <span id="file-path-display" class="file-path-display">選択されていません</span>
-                <button id="btn-save" class="btn-primary">💾 保存</button>
                 <button id="btn-speak" class="btn-primary">▶️ 再生</button>
                 <button id="btn-generate" class="btn-secondary">🔊 生成</button>
+                <button id="btn-save" class="btn-primary">💾 保存</button>
                 <button id="btn-file-clear" class="file-select-btn" type="button">🗑️ クリア</button>
             </div>
         </div>
@@ -75,7 +78,7 @@
         <!-- ステータス・プログレスバー部分 -->
         <div class="field">
             <progress id="engine-progress" value="0" max="100" class="engine-progress" hidden></progress>
-            <progress id="text-progress" value="0" max="100" class="text-progress" hidden></progress>
+            <progress id="text-progress" value="0" max="100" class="text-progress" hidden></hidden>
             <progress id="mp3-progress" value="0" max="100" class="mp3-progress" hidden></progress>
         </div>
         <div class="status" id="status">AivisSpeech Engineに接続中...</div>

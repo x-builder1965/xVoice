@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.12.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.13.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -13,10 +13,11 @@ const http = require('http');
 const { exec, spawn } = require('child_process');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
+
 // AivisSpeech-Engine定義
 const ENGINE_PATH = 'C:\\Program Files\\AivisSpeech\\AivisSpeech-Engine';
 const ENGINE_EXE = 'run.exe';
-const AIVIS_HOST = 'http://127.0.0.1:10101';
+const DEFAULT_AIVIS_HOST = 'http://127.0.0.1:10101';
 
 // 🔲グローバル変数🔲
 let mainWindow = null;
@@ -46,17 +47,49 @@ app.on('window-all-closed', () => {
 });
 
 // 🔲IPC ハンドラー登録🔲
-// アプリ起動時の初期化・Engine起動処理
-ipcMain.handle('init-engine', async () => {
-    return await startAivisEngine();
+// アプリ起動時の初期化チェック（動的アドレス指定対応）
+ipcMain.handle('init-engine', async (event, address = DEFAULT_AIVIS_HOST) => {
+    const isHealthy = await checkEngineHealth(address);
+    if (isHealthy) {
+        return { success: true, isSelfConnected: false };
+    }
+    return { success: false, isSelfConnected: false };
+});
+
+// 手動接続・自起動ハンドラー
+ipcMain.handle('connect-engine', async (event, address = DEFAULT_AIVIS_HOST) => {
+    // 1. 指定されたアドレスのヘルスチェック
+    let isHealthy = await checkEngineHealth(address);
+    if (isHealthy) {
+        return { success: true, isSelfConnected: false };
+    }
+
+    // 2. ローカル環境（localhost / 127.0.0.1）の場合は自起動を試みる
+    if (address.includes('127.0.0.1') || address.includes('localhost')) {
+        const launched = await startAivisEngine(address);
+        if (launched) {
+            return { success: true, isSelfConnected: true };
+        }
+    }
+
+    return { success: false, error: 'AivisSpeech Engine サーバーに接続できませんでした。' };
+});
+
+// 手動切断ハンドラー
+ipcMain.handle('disconnect-engine', async () => {
+    if (isEngineSpawnedByApp) {
+        await stopAivisEngine();
+    }
+    return { success: true };
 });
 
 // Engine再起動処理
-ipcMain.handle('restart-engine', async () => {
+ipcMain.handle('restart-engine', async (event, address = DEFAULT_AIVIS_HOST) => {
     // 手動再起動時は一旦強制停止してから再起動（自前管理化する）
     await stopAivisEngine();
     await new Promise(r => setTimeout(r, 1000));
-    return await startAivisEngine();
+    const success = await startAivisEngine(address);
+    return { success };
 });
 
 // 音声保存処理
@@ -191,23 +224,47 @@ function createWindow() {
 }
 
 // Engineのヘルスチェック (起動完了待ち) 
-function checkEngineHealth() {
+function checkEngineHealth(address = DEFAULT_AIVIS_HOST) {
     return new Promise((resolve) => {
-        http.get(`${AIVIS_HOST}/version`, (res) => {
-            resolve(res.statusCode === 200);
-        }).on('error', () => {
+        try {
+            const parsedUrl = new URL(address);
+            const req = http.get({
+                hostname: parsedUrl.hostname,
+                port: parsedUrl.port || 80,
+                path: '/version',
+                timeout: 1500
+            }, (res) => {
+                resolve(res.statusCode === 200);
+            });
+            req.on('error', () => resolve(false));
+            req.on('timeout', () => {
+                req.destroy();
+                resolve(false);
+            });
+        } catch (e) {
             resolve(false);
-        });
+        }
     });
 }
 
 // Engine起動状態確認＆起動処理
-async function startAivisEngine() {
-    const isRunning = await checkEngineHealth();
+async function startAivisEngine(address = DEFAULT_AIVIS_HOST) {
+    const isRunning = await checkEngineHealth(address);
     if (isRunning) {
-        if (mainWindow) mainWindow.webContents.send('engine-progress-update', { current: 60, total: 60, isRunning: true });
+        if (mainWindow) {
+            mainWindow.webContents.send('engine-progress-update', { current: 60, total: 60, isRunning: true });
+            // レンダラー側のイベント受信用インターフェース互換
+            mainWindow.webContents.send('engine-progress', { current: 60, total: 60, isRunning: true });
+        }
         // 既に外部等で起動済みの場合は自前起動フラグを立てない
         return true;
+    }
+
+    // run.exe 存在確認
+    const fullExePath = path.join(ENGINE_PATH, ENGINE_EXE);
+    if (!fs.existsSync(fullExePath)) {
+        console.error('ローカル Engine 実行ファイルが見つかりません:', fullExePath);
+        return false;
     }
 
     // run.exe 起動
@@ -224,14 +281,18 @@ async function startAivisEngine() {
     for (let i = 1; i <= maxTries; i++) {
         await new Promise(r => setTimeout(r, 2000));
 
-        // 進捗状況を画面に送出
-        if (mainWindow) {
-            mainWindow.webContents.send('engine-progress-update', { current: i, total: maxTries, isRunning: false });
+        // 進捗状況を画面に送出（両方の命名イベントに対応）
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            const progressData = { current: i, total: maxTries, isRunning: false };
+            mainWindow.webContents.send('engine-progress-update', progressData);
+            mainWindow.webContents.send('engine-progress', progressData);
         }
 
-        if (await checkEngineHealth()) {
-            if (mainWindow) {
-                mainWindow.webContents.send('engine-progress-update', { current: maxTries, total: maxTries, isRunning: true });
+        if (await checkEngineHealth(address)) {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                const completeData = { current: maxTries, total: maxTries, isRunning: true };
+                mainWindow.webContents.send('engine-progress-update', completeData);
+                mainWindow.webContents.send('engine-progress', completeData);
             }
             return true;
         }

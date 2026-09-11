@@ -1,11 +1,12 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.12.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.13.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
-    const AIVIS_HOST = 'http://127.0.0.1:10101';
+    const DEFAULT_HOST = 'http://127.0.0.1:10101';
+
     // --- localStorage保存・復元用キー定数 ---
     const STORAGE_KEYS = {
         FILE_PATH: 'xVoice_filePath',
@@ -14,13 +15,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         VOLUME: 'xVoice_volume',
         FONT_SIZE: 'xVoice_fontSize',
         SPEAKER: 'xVoice_speaker',
-        TEXT_DIRECTION: 'xVoice_textDirection'
+        TEXT_DIRECTION: 'xVoice_textDirection',
+        SERVER_ADDRESS: 'xVoice_serverAddress'
     };
 
     // 🔲DOM定義🔲
     let btnTheme = null;
     let speakerSelect = null;
-    let btnRestart = null;
+    let btnConnect = null;      // 「🔄 接続 / ❌ 切断」トグルボタン
+    let inputAddress = null;    // 「アドレス入力」欄
+    let engineProgress = null;
     let btnFileSelect = null;
     let filePathDisplay = null;
     let textInput = null;
@@ -41,18 +45,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 🔲グローバル変数定義🔲
     let isPlaying = false;
     let isStopped = false;
-    let isLineJumped = false;  // 再生中の行ジャンプ用フラグ
-    let currentLineIndex = 0;  // 再開位置を保持する行インデックス
-    let previousText = '';      // テキスト内容の変更検知用
+    let isLineJumped = false;     // 再生中の行ジャンプ用フラグ
+    let currentLineIndex = 0;     // 再開位置を保持する行インデックス
+    let previousText = '';         // テキスト内容の変更検知用
     let isGenerating = false;
     let isGenerateCanceled = false;
-    let isEngineReady = false; // エラー時の状態判定用
+    let isEngineReady = false;    // エンジン接続状態フラグ
     let toastTimer = null;
 
     // 🔲初期設定🔲
     setupAllDomSettings();
 
-    // --- 設定の復元ロジック ---
+    // アドレスの復元
+    const savedAddress = localStorage.getItem(STORAGE_KEYS.SERVER_ADDRESS) || DEFAULT_HOST;
+    if (inputAddress) {
+        inputAddress.value = savedAddress;
+    }
+
+    // 音量設定の復元
     if (audioPlayer) {
         const savedVolume = localStorage.getItem(STORAGE_KEYS.VOLUME);
         audioPlayer.volume = savedVolume !== null ? parseFloat(savedVolume) : 0.2;
@@ -61,21 +71,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             localStorage.setItem(STORAGE_KEYS.VOLUME, audioPlayer.volume);
         });
     }
-    
+
     // フォントサイズ選択の復元
     const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
     applyFontSize(savedFontSize);
 
     // ファイルパスの復元
     const savedFilePath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
-    if (savedFilePath) {
+    if (savedFilePath && filePathDisplay) {
         filePathDisplay.textContent = savedFilePath;
         updateFilePathMarquee();
     }
 
     // テキストの復元
     const savedText = localStorage.getItem(STORAGE_KEYS.TEXT);
-    if (savedText !== null) {
+    if (savedText !== null && textInput) {
         const normalizedSavedText = savedText.replace(/\r\n/g, '\n');
         textInput.value = normalizedSavedText;
         previousText = normalizedSavedText;
@@ -94,15 +104,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // テーマ設定の復元
     setTheme(localStorage.getItem('theme') || 'dark');
 
-    // アプリ初期化実行
-    initApp();
-
     // 🔲window イベントリスナー登録🔲
-    // windowのサイズ変更イベント
     window.addEventListener('resize', () => {
         updateFilePathMarquee();
         if (textInput) {
-            // 即時反映と、リサイズ完了後の確定反映の2段階で実行
             moveCursorToLineStart(currentLineIndex);
             setTimeout(() => {
                 moveCursorToLineStart(currentLineIndex);
@@ -111,17 +116,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // 🔲個別イベントリスナー登録🔲
+    // アドレス入力の保存
+    inputAddress?.addEventListener('change', (e) => {
+        localStorage.setItem(STORAGE_KEYS.SERVER_ADDRESS, e.target.value.trim());
+    });
+
     // 話者モデルの選択変更イベント
     speakerSelect?.addEventListener('change', (e) => {
         localStorage.setItem(STORAGE_KEYS.SPEAKER, e.target.value);
     });
 
     // フォントサイズ変更イベント
-    if (fontSizeSelect) {
-        fontSizeSelect.addEventListener('change', (e) => {
-            applyFontSize(e.target.value);
-        });
-    }
+    fontSizeSelect?.addEventListener('change', (e) => {
+        applyFontSize(e.target.value);
+    });
 
     // テキスト表示向きの変更イベント
     writingModeSelect?.addEventListener('change', (e) => {
@@ -134,10 +142,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         setTheme(currentTheme === 'dark' ? 'light' : 'dark');
     });
 
-    // ファイル選択のクリックイベント
+    // カーソル位置変更イベント
     textInput?.addEventListener('click', handleCursorChange);
-
-    // ファイル選択のキーアップイベント
     textInput?.addEventListener('keyup', (e) => {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
             handleCursorChange();
@@ -147,12 +153,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ファイル選択のクリックイベント
     btnFileSelect?.addEventListener('click', async () => {
         const fileData = await window.api.selectFile();
-        if (!fileData) return; // キャンセル時
-
+        if (!fileData) return;
         loadFileContent(fileData.path, fileData.content);
     });
 
-    // Ｄ＆Ｄのドラッグオーバーイベント
+    // Ｄ＆Ｄ イベントリスナー
     document.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -160,7 +165,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.body.classList.add('drag-over');
     });
 
-    // Ｄ＆Ｄのドラッグリーヴイベント
     document.addEventListener('dragleave', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -169,7 +173,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Ｄ＆Ｄのドロップイベント
     document.addEventListener('drop', async (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -191,21 +194,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             } catch (err) {
                 console.error('D&D ファイル読み込みエラー:', err);
-                statusDiv.textContent = 'ファイルの読み込みに失敗しました';
+                showToast('ファイルの読み込みに失敗しました', 'error');
             }
         }
     });
 
     // クリアボタンのクリックイベント
     btnFileClear?.addEventListener('click', () => {
-        filePathDisplay.textContent = '選択されていません';
+        if (filePathDisplay) filePathDisplay.textContent = '選択されていません';
         updateFilePathMarquee();
         if (textInput) textInput.value = '';
         if (btnGenerate) btnGenerate.disabled = true;
 
         currentLineIndex = 0;
         previousText = '';
-        isFirstPlay = true;
 
         localStorage.removeItem(STORAGE_KEYS.FILE_PATH);
         localStorage.removeItem(STORAGE_KEYS.TEXT);
@@ -218,46 +220,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (btnGenerate && !isGenerating) {
             btnGenerate.disabled = !isEngineReady || !currentText.trim();
         }
-        
+
         if (currentText !== previousText) {
             currentLineIndex = 0;
             previousText = currentText;
-            isFirstPlay = true;
             localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
         }
 
         localStorage.setItem(STORAGE_KEYS.TEXT, currentText);
     });
 
-    // エンジン再起動のクリックイベント
-    btnRestart?.addEventListener('click', async () => {
-        statusDiv.textContent = 'AivisSpeech Engine 再起動中...';
-        isEngineReady = false;
-        btnSpeak.disabled = true;
-        btnGenerate.disabled = true; // ★再起動中も非活性化
-        btnRestart.disabled = true;
-
-        const ready = await window.api.restartEngine();
-        if (ready) {
-            await loadSpeakers();
-            isEngineReady = true;
-            btnSpeak.disabled = false;
-            btnGenerate.disabled = !textInput.value.trim();
-        } else {
-            statusDiv.textContent = 'Engineの再起動に失敗しました';
-        }
-        btnRestart.disabled = false;
+    // 「🔄 接続 / ❌ 切断」トグルボタンのクリックイベント
+    btnConnect?.addEventListener('click', async () => {
+        await handleConnectToggle();
     });
 
-    btnSave.addEventListener('click', async () => {
+    // 保存ボタンクリックイベント
+    btnSave?.addEventListener('click', async () => {
         if (!textInput.value.trim()) {
-            showToast('💾 保存するテキストがありません。');
+            showToast('保存するテキストがありません。', 'warning');
             return;
         }
 
-        const rawPath = filePathDisplay.textContent?.trim() || '';
-        // 「選択されていません」または「設定されていません」の場合は空文字にする
-        const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;        
+        const rawPath = filePathDisplay?.textContent?.trim() || '';
+        const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
         const result = await window.api.saveTextFile(textInput.value, currentPath);
         if (result.success) {
             console.log('保存完了:', result.filePath);
@@ -276,17 +262,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 「🔊 生成」 / 「❌ 中止」 クリックイベント
     btnGenerate?.addEventListener('click', () => {
         if (isGenerating) {
-            // 保存中にクリックされた場合はキャンセルフラグを立てる
             isGenerateCanceled = true;
-            btnGenerate.disabled = true; // 二重クリック防止
+            btnGenerate.disabled = true;
         } else {
-            // 通常時は保存処理を実行
             generateFullTextMp3();
         }
     });
 
     // 🔲コールバック処理🔲
-    // エンジン起動進捗受信
+    // エンジン起動進捗受信 (パターンC自起動時)
     window.api.onEngineProgress(({ current, total, isRunning }) => {
         if (engineProgressBar) {
             showProgressBar('engine');
@@ -296,25 +280,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (isRunning) {
                 isEngineReady = true;
-                statusDiv.textContent = 'AivisSpeech Engine の起動が完了しました';
-                // ★エンジン起動完了に伴いボタンが「🔊 生成」であることを確認して活性化
+                showToast('Engine の起動が完了しました');
                 if (btnGenerate && !isGenerating) {
                     btnGenerate.disabled = !textInput.value.trim();
                 }
                 setTimeout(() => { engineProgressBar.hidden = true; }, 1000);
             } else {
                 isEngineReady = false;
-                if (btnGenerate) btnGenerate.disabled = true; // 起動中は非活性
-                statusDiv.textContent = `AivisSpeech Engine 起動確認中... (${current}/${total} - ${percent}%)`;
+                if (btnGenerate) btnGenerate.disabled = true;
+                if (statusDiv) statusDiv.textContent = `Engine 起動確認中... (${current}/${total} - ${percent}%)`;
             }
         }
     });
+
+    // Engine 初期化実行
+    await initEngine();
 
     // 🔲初期設定関数🔲
     function setupAllDomSettings() {
         btnTheme = document.getElementById('btn-theme');
         speakerSelect = document.getElementById('speaker');
-        btnRestart = document.getElementById('btn-restart');
+        btnConnect = document.getElementById('btn-connect');
+        inputAddress = document.getElementById('input-address');
+        engineProgress = document.getElementById('engine-progress');
         btnFileSelect = document.getElementById('btn-file-select');
         filePathDisplay = document.getElementById('file-path-display');
         textInput = document.getElementById('text');
@@ -333,188 +321,140 @@ document.addEventListener('DOMContentLoaded', async () => {
         toastMessage = document.getElementById('toast-message');
     }
 
-    // Engine 初期化 & 再起動制御
-    async function initApp() {
-        statusDiv.textContent = 'AivisSpeech Engine 起動中...';
+    // Engine 初期化 (アプリ起動時)
+    async function initEngine() {
+        if (statusDiv) statusDiv.textContent = 'Engine 接続確認中...';
         isEngineReady = false;
-        btnSpeak.disabled = true;
-        btnGenerate.disabled = true; // ★起動完了まで非活性化
-        if (btnRestart) btnRestart.disabled = true;
-
-        const ready = await window.api.initEngine();
-        if (ready) {
-            await loadSpeakers();
+        if (btnSpeak) btnSpeak.disabled = true;
+        if (btnGenerate) btnGenerate.disabled = true;
+    
+        const address = getServerAddress();
+        const res = await window.api.initEngine(address);
+    
+        if (res.success) {
+            // 起動済の場合
             isEngineReady = true;
-            btnSpeak.disabled = false;
-            btnGenerate.disabled = !textInput.value.trim(); // ★起動完了後にテキスト判定で有効化
+            isSelfConnected = res.isSelfConnected;
+            updateConnectionUI(true);
+            await loadSpeakers();
+            showToast('Engine に接続済みです');
         } else {
-            statusDiv.textContent = 'Engineの起動に失敗しました';
+            // 未起動の場合：自動接続（起動）を開始
+            isEngineReady = false;
+            updateConnectionUI(false);
+            if (statusDiv) statusDiv.textContent = 'Engine 未接続（自動起動・接続を試行中...）';
+    
+            // 自動接続ハンドラーを実行
+            await handleConnectToggle();
         }
-        if (btnRestart) btnRestart.disabled = false;
-
-        moveCursorToLineStart(currentLineIndex, true);
+    
+        if (typeof moveCursorToLineStart === 'function') {
+            moveCursorToLineStart(currentLineIndex, true);
+        }
     }
 
-    // 🔲共通ヘルパー関数🔲
-    // --- 指定行の先頭にカーソルを移動しスクロール表示する共通関数 ---
-    function moveCursorToLineStart(lineIndex, highlight = isPlaying) {
-        if (!textInput) return;
-    
-        const fullText = textInput.value.replace(/\r\n/g, '\n');
-        const lines = fullText.split('\n');
-    
-        if (lines.length === 0) return;
-    
-        // 範囲外のインデックスを補正
-        const targetIndex = Math.max(0, Math.min(lineIndex, lines.length - 1));
-    
-        // 指定行の先頭位置（文字オフセット）を計算
-        let charOffset = 0;
-        for (let i = 0; i < targetIndex; i++) {
-            charOffset += lines[i].length + 1; // 改行文字 (+1)
-        }
-    
-        const currentLineLength = lines[targetIndex].length;
-    
-        // 1. フォーカスと選択範囲（ハイライト）の適用
-        textInput.focus({ preventScroll: true });
-        if (highlight) {
-            // 行全体をハイライト選択
-            textInput.setSelectionRange(charOffset, charOffset + currentLineLength);
+    // 「🔄 接続 / ❌ 切断」のトグル実行関数
+    async function handleConnectToggle() {
+        if (isEngineReady) {
+            if (statusDiv) statusDiv.textContent = 'Engine から切断中...';
+            await window.api.disconnectEngine();
+            isEngineReady = false;
+            isSelfConnected = false;
+            updateConnectionUI(false);
+            if (speakerSelect) {
+                speakerSelect.innerHTML = '<option value="">未接続</option>';
+                speakerSelect.disabled = true;
+            }
+            if (btnSpeak) btnSpeak.disabled = true;
+            if (btnGenerate) btnGenerate.disabled = true;
+            showToast('Engine から切断されました');
         } else {
-            // 単一カーソル位置のみ設定
-            textInput.setSelectionRange(charOffset, charOffset);
-        }
-    
-        // 2. 鏡像（ミラー）要素を使って該当行の正確なピクセル位置を取得し中央へスクロール
-        scrollTextareaToCharOffset(textInput, charOffset);
-    }
-
-    // --- textarea の特定文字位置を正確に画面中央へスクロールさせるヘルパー関数 ---
-    function scrollTextareaToCharOffset(textarea, charIndex) {
-        const style = window.getComputedStyle(textarea);
-        const isVertical = style.writingMode.startsWith('vertical');
-
-        // 1. ミラー要素を作成してスタイルを完全複製
-        const mirror = document.createElement('div');
-        
-        const stylesToCopy = [
-            'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing',
-            'lineHeight', 'textTransform', 'wordBreak', 'overflowWrap', 'whiteSpace',
-            'padding', 'boxSizing', 'direction'
-        ];
-        stylesToCopy.forEach(prop => {
-            mirror.style[prop] = style[prop];
-        });
-
-        // 縦書きスタイルを明示的にセット
-        if (isVertical) {
-            mirror.style.writingMode = 'vertical-rl';
-            mirror.style.webkitWritingMode = 'vertical-rl';
-            // 縦書きの行折り返し幅を一致させるため、clientHeightをそのまま固定
-            mirror.style.height = `${textarea.clientHeight}px`;
-            mirror.style.width = 'auto';
-        } else {
-            mirror.style.writingMode = 'horizontal-tb';
-            mirror.style.width = `${textarea.clientWidth}px`;
-            mirror.style.height = 'auto';
-        }
-
-        // 画面外に隠す設定
-        mirror.style.position = 'absolute';
-        mirror.style.top = '-9999px';
-        mirror.style.left = '-9999px';
-        mirror.style.visibility = 'hidden';
-        mirror.style.overflow = 'hidden';
-
-        // 2. ターゲット文字に span を挿入
-        const textBefore = textarea.value.substring(0, charIndex);
-        const textAfter = textarea.value.substring(charIndex);
-
-        const span = document.createElement('span');
-        span.textContent = textAfter.charAt(0) || ' ';
-
-        mirror.textContent = textBefore;
-        mirror.appendChild(span);
-
-        document.body.appendChild(mirror);
-
-        if (isVertical) {
-            // --- 縦書き (vertical-rl) の中央スクロール計算 ---
+            if (statusDiv) statusDiv.textContent = 'Engine に接続中...';
             
-            // ミラー要素内での span の左端位置と幅
-            const spanLeft = span.offsetLeft;
-            const spanWidth = span.offsetWidth || parseFloat(style.fontSize);
-            const mirrorWidth = mirror.scrollWidth;
-
-            document.body.removeChild(mirror);
-
-            // ミラーの「右端」から対象文字の「中心」までのピクセル距離
-            const charCenterFromRight = mirrorWidth - (spanLeft + (spanWidth / 2));
-
-            // textarea の表示幅
-            const clientWidth = textarea.clientWidth;
-            const scrollWidth = textarea.scrollWidth;
-
-            // 右端(0) から左へ向かうスクロール目標量 (px)
-            // 画面中央に来るための「右端からの距離」
-            const targetOffsetFromRight = charCenterFromRight - (clientWidth / 2);
-
-            // Chromiumの vertical-rl は 右端=0、左へいくほどマイナス値 (-100, -200...)
-            // targetOffsetFromRight がプラスであればマイナス化、マイナス（画面幅より右）なら 0 に止める
-            let targetScrollLeft = -targetOffsetFromRight;
-
-            // 【範囲ガード】
-            // 1. 右外に飛ばないよう 0 以下に制限（0 = 右端ピッタリ）
-            if (targetScrollLeft > 0) {
-                targetScrollLeft = 0;
+            // 安全チェックを入れることで ReferenceError を防止
+            if (typeof engineProgress !== 'undefined' && engineProgress) {
+                engineProgress.value = 0;
+                engineProgress.hidden = false;
             }
-
-            // 2. 左端の限界を超えないようクランプ
-            const maxNegativeScroll = -(scrollWidth - clientWidth);
-            if (targetScrollLeft < maxNegativeScroll) {
-                targetScrollLeft = maxNegativeScroll;
+    
+            if (btnConnect) btnConnect.disabled = true;
+            if (inputAddress) inputAddress.disabled = true;
+    
+            const address = getServerAddress();
+            const res = await window.api.connectEngine(address);
+    
+            if (typeof engineProgress !== 'undefined' && engineProgress) {
+                engineProgress.hidden = true;
             }
-
-            // スクロール適用
-            textarea.scrollLeft = targetScrollLeft;
-
-        } else {
-            // --- 横書き (horizontal-tb) の計算 ---
-            const spanTop = span.offsetTop;
-            const spanHeight = span.offsetHeight || parseFloat(style.fontSize);
-
-            document.body.removeChild(mirror);
-
-            const clientHeight = textarea.clientHeight;
-            const targetTop = spanTop - (clientHeight / 2) + (spanHeight / 2);
-
-            textarea.scrollTop = Math.max(0, targetTop);
+    
+            if (res.success) {
+                isEngineReady = true;
+                isSelfConnected = res.isSelfConnected;
+                updateConnectionUI(true);
+                await loadSpeakers();
+                showToast('Engine に接続しました');
+            } else {
+                isEngineReady = false;
+                updateConnectionUI(false);
+                showToast(res.error || '接続に失敗しました', 'error');
+            }
         }
     }
 
-    // テキストの表示向き設定・適用処理
+    // 接続状態に応じたUI切り替えヘルパー
+    function updateConnectionUI(connected) {
+        if (!btnConnect || !inputAddress) return;
+    
+        if (connected) {
+            btnConnect.textContent = '❌ 切断';
+            btnConnect.disabled = false;
+            inputAddress.disabled = true; // 接続時はアドレス編集不可
+            
+            // 【追加】接続時は再生・一括生成ボタンを有効化
+            if (btnSpeak) btnSpeak.disabled = false;
+            if (btnGenerate) btnGenerate.disabled = false;
+            if (speakerSelect) speakerSelect.disabled = false;
+            if (fontSizeSelect) fontSizeSelect.disabled = false;
+            if (writingModeSelect) writingModeSelect.disabled = false;
+        } else {
+            btnConnect.textContent = '🔄 接続';
+            btnConnect.disabled = false;
+            inputAddress.disabled = false; // 未接続時はアドレス編集可能
+            
+            // 【追加】未接続時は各ボタンを無効化
+            if (btnSpeak) btnSpeak.disabled = true;
+            if (btnGenerate) btnGenerate.disabled = true;
+            if (speakerSelect) speakerSelect.disabled = true;
+            if (fontSizeSelect) fontSizeSelect.disabled = true;
+            if (writingModeSelect) writingModeSelect.disabled = true;
+        }
+    }
+
+    // サーバーアドレス取得ヘルパー
+    function getServerAddress() {
+        return (inputAddress?.value.trim() || DEFAULT_HOST).replace(/\/$/, '');
+    }
+
+    // 🔲設定・適用ロジック関数群🔲
+
     function applyTextDirection(direction) {
         if (!textInput) return;
-    
-        // 1. スタイルの直接適用とUI状態更新
+
         textInput.style.writingMode = direction;
         if (writingModeSelect) writingModeSelect.value = direction;
         localStorage.setItem(STORAGE_KEYS.TEXT_DIRECTION, direction);
-    
-        // 2. CSSクラスの切り替え（is-vertical のON/OFF）
+
         if (textElem) {
             textElem.classList.toggle('is-vertical', direction === 'vertical-rl');
         }
     }
 
-    // フォントサイズの適用・変更処理
     function applyFontSize(size) {
         if (!textInput) return;
 
         const oldLineHeight = parseFloat(window.getComputedStyle(textInput).lineHeight) || 20;
         const oldScrollTop = textInput.scrollTop;
-        
+
         const start = textInput.selectionStart;
         const end = textInput.selectionEnd;
 
@@ -523,7 +463,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (fontSizeSelect) fontSizeSelect.value = size;
         localStorage.setItem(STORAGE_KEYS.FONT_SIZE, size);
 
-        // ★フォントサイズ変更に伴いファイルパスの横幅が変わるため、スクロール表示を再計算
         updateFilePathMarquee();
 
         const newLineHeight = parseFloat(window.getComputedStyle(textInput).lineHeight) || 20;
@@ -540,21 +479,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 進捗バー表示切り替えヘルパー
     function showProgressBar(type) {
         if (engineProgressBar) engineProgressBar.hidden = (type !== 'engine');
         if (textProgressBar) textProgressBar.hidden = (type !== 'text');
         if (mp3ProgressBar) mp3ProgressBar.hidden = (type !== 'mp3');
     }
 
-    // テーマ設定
     function setTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('theme', theme);
         if (btnTheme) btnTheme.textContent = theme === 'dark' ? '☀️' : '🌙';
     }
 
-    // 現在のカーソル位置から行インデックスを取得する関数
     function getCursorLineIndex() {
         if (!textInput) return 0;
         const fullText = textInput.value.replace(/\r\n/g, '\n');
@@ -563,7 +499,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return (textUpToCursor.match(/\n/g) || []).length;
     }
 
-    // 再生中のカーソル移動（クリック／キー操作）の監視
     function handleCursorChange() {
         if (!isPlaying) return;
 
@@ -571,7 +506,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (targetLineIndex !== currentLineIndex) {
             currentLineIndex = targetLineIndex;
             localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
-            
+
             isLineJumped = true;
             if (audioPlayer) {
                 audioPlayer.pause();
@@ -580,13 +515,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // ファイル読み込み後の共通処理関数
     function loadFileContent(path, content) {
         const loadedText = (content || '').replace(/\r\n/g, '\n');
 
         if (filePathDisplay) filePathDisplay.textContent = path;
         localStorage.setItem(STORAGE_KEYS.FILE_PATH, path);
-    
+
         updateFilePathMarquee();
 
         if (textInput) textInput.value = loadedText;
@@ -597,33 +531,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.setItem(STORAGE_KEYS.TEXT, loadedText);
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
 
-        if (btnGenerate) btnGenerate.disabled = !textInput.value.trim();
+        if (btnGenerate) btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
 
         moveCursorToLineStart(0);
     }
 
-    // --- ボタンおよび入力要素の状態管理 ---
     function updateButtonStates(playing) {
         isPlaying = playing;
-        
+
         if (btnSpeak) {
             btnSpeak.textContent = playing ? '⏹️停止' : '▶️再生';
             textInput.style.cursor = playing ? 'pointer' : 'text';
         }
 
-        // 保存実行中でなければ再生状態に応じて非活性を制御
         if (btnGenerate && !isGenerating) {
             btnGenerate.disabled = playing || !isEngineReady || !textInput.value.trim();
         }
         if (btnFileClear) btnFileClear.disabled = playing || isGenerating;
-    
         if (btnFileSelect) btnFileSelect.disabled = playing || isGenerating;
         if (fontSizeSelect) fontSizeSelect.disabled = playing || isGenerating;
         if (writingModeSelect) writingModeSelect.disabled = playing || isGenerating;
         if (textInput) textInput.readOnly = playing || isGenerating;
     }
 
-    // 保存ボタンの表示・状態を初期化するヘルパー関数
     function resetGenerateButton() {
         isGenerating = false;
         isGenerateCanceled = false;
@@ -631,7 +561,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnGenerate.textContent = '🔊 生成';
             btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
         }
-        btnSpeak.disabled = false;
+        if (btnSpeak) btnSpeak.disabled = !isEngineReady;
         if (btnFileSelect) btnFileSelect.disabled = false;
         if (btnFileClear) btnFileClear.disabled = false;
         if (fontSizeSelect) fontSizeSelect.disabled = false;
@@ -639,51 +569,53 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (textInput) textInput.readOnly = false;
     }
 
-    // 話者一覧取得
+    // 話者一覧取得 (動的アドレス対応)
     async function loadSpeakers() {
         try {
-            const res = await fetch(`${AIVIS_HOST}/speakers`);
+            const baseUrl = getServerAddress();
+            const res = await fetch(`${baseUrl}/speakers`);
             if (!res.ok) throw new Error();
             const speakers = await res.json();
 
-            speakerSelect.innerHTML = '';
-            speakers.forEach(sp => {
-                sp.styles.forEach(style => {
-                    const opt = document.createElement('option');
-                    opt.value = style.id;
-                    opt.textContent = `${sp.name} (${style.name})`;
-                    speakerSelect.appendChild(opt);
+            if (speakerSelect) {
+                speakerSelect.innerHTML = '';
+                speakers.forEach(sp => {
+                    sp.styles.forEach(style => {
+                        const opt = document.createElement('option');
+                        opt.value = style.id;
+                        opt.textContent = `${sp.name} (${style.name})`;
+                        speakerSelect.appendChild(opt);
+                    });
                 });
-            });
 
-            const savedSpeaker = localStorage.getItem(STORAGE_KEYS.SPEAKER);
-            if (savedSpeaker) {
-                const exists = Array.from(speakerSelect.options).some(opt => opt.value === String(savedSpeaker));
-                if (exists) {
-                    speakerSelect.value = savedSpeaker;
+                const savedSpeaker = localStorage.getItem(STORAGE_KEYS.SPEAKER);
+                if (savedSpeaker) {
+                    const exists = Array.from(speakerSelect.options).some(opt => opt.value === String(savedSpeaker));
+                    if (exists) {
+                        speakerSelect.value = savedSpeaker;
+                    }
                 }
             }
 
-            statusDiv.textContent = '準備完了';
+            showToast('話者モデル取得完了');
             return true;
         } catch (err) {
-            statusDiv.textContent = 'エラー: AivisSpeech Engineが起動していません';
+            showToast('Engine に接続できません', 'error');
             return false;
         }
     }
 
-    // 音声生成ロジック
+    // 音声生成ロジック (動的アドレス対応)
     async function fetchAudioBuffer(text, speakerId) {
-        // 変換ルビの置換処理
-        // {元語句|読み} または ｛元語句｜読み｝ の形式に対応
+        const baseUrl = getServerAddress();
         const processedText = text.replace(/[｛{][^｜|]+[｜|]([^｝}]+)[｝}]/g, '$1');
 
-        const queryRes = await fetch(`${AIVIS_HOST}/audio_query?text=${encodeURIComponent(processedText)}&speaker=${speakerId}`, {
+        const queryRes = await fetch(`${baseUrl}/audio_query?text=${encodeURIComponent(processedText)}&speaker=${speakerId}`, {
             method: 'POST'
         });
         const audioQuery = await queryRes.json();
 
-        const synthRes = await fetch(`${AIVIS_HOST}/synthesis?speaker=${speakerId}`, {
+        const synthRes = await fetch(`${baseUrl}/synthesis?speaker=${speakerId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(audioQuery)
@@ -692,7 +624,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return await synthRes.arrayBuffer();
     }
 
-    // 停止処理関数
     function stopPlayback() {
         if (!isPlaying) return;
 
@@ -702,75 +633,63 @@ document.addEventListener('DOMContentLoaded', async () => {
             audioPlayer.currentTime = 0;
         }
 
-        statusDiv.textContent = `停止しました (${currentLineIndex + 1} 行目で停止中)`;
+        if (statusDiv) statusDiv.textContent = `停止しました (${currentLineIndex + 1} 行目で停止中)`;
         updateButtonStates(false);
 
-        // ★第2引数に true を明示的に指定して、停止後もハイライトを維持
         moveCursorToLineStart(currentLineIndex, true);
     }
 
-    // 「1行毎に合成・再生（ハイライト＋自動スクロール付き）」処理
     async function playLineByLine() {
         const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.split('\n');
-            
-        if (!fullText.trim()) return showToast('▶️ テキストを入力してください。');
-    
+
+        if (!fullText.trim()) return showToast('テキストを入力してください', 'warning');
+
         const normalizedPreviousText = previousText.replace(/\r\n/g, '\n');
-    
-        // テキスト内容が変更された場合のみ先頭（0行目）から再生
+
         if (normalizedPreviousText !== '' && fullText !== normalizedPreviousText) {
             currentLineIndex = 0;
             isFirstPlay = true;
         } else {
-            // 停止中・初回再生前に移動されたカーソル位置を確実に取得
             currentLineIndex = getCursorLineIndex();
         }
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
-    
+
         previousText = fullText;
         isFirstPlay = false;
-    
+
         if (currentLineIndex >= lines.length) {
             currentLineIndex = 0;
             localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
         }
-    
+
         updateButtonStates(true);
         isStopped = false;
         isLineJumped = false;
-    
+
         showProgressBar('text');
         if (textProgressBar) {
             textProgressBar.value = Math.round((currentLineIndex / lines.length) * 100);
         }
-    
+
         while (currentLineIndex < lines.length) {
             if (isStopped) break;
-    
+
             const i = currentLineIndex;
             localStorage.setItem(STORAGE_KEYS.LINE_INDEX, i);
-    
+
             const currentSpeakerId = speakerSelect.value;
-    
             const progressPercent = Math.round(((i + 1) / lines.length) * 100);
             if (textProgressBar) {
                 textProgressBar.value = progressPercent;
             }
-    
+
             const lineText = lines[i];
             const lineTrimmed = lineText.trim();
-            const lineLength = lineText.length;
-    
-            let charOffset = 0;
-            for (let k = 0; k < i; k++) {
-                charOffset += lines[k].length + 1;
-            }
-    
+
             if (lineTrimmed.length > 0) {
-                statusDiv.textContent = `再生中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
-    
-                // 共通関数を呼び出し（フォーカス、ハイライト範囲指定、中央スクロールを一括実行）
+                if (statusDiv) statusDiv.textContent = `再生中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
+
                 moveCursorToLineStart(i);
 
                 try {
@@ -782,10 +701,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                         break;
                     }
-    
+
                     const blob = new Blob([audioData], { type: 'audio/wav' });
                     audioPlayer.src = URL.createObjectURL(blob);
-    
+
                     await new Promise((resolve) => {
                         const checkStopped = setInterval(() => {
                             if (isStopped || isLineJumped) {
@@ -793,7 +712,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 resolve();
                             }
                         }, 100);
-    
+
                         audioPlayer.onended = () => {
                             clearInterval(checkStopped);
                             resolve();
@@ -802,48 +721,44 @@ document.addEventListener('DOMContentLoaded', async () => {
                             clearInterval(checkStopped);
                             resolve();
                         };
-    
+
                         audioPlayer.play().catch(() => resolve());
                     });
-    
+
                     if (isLineJumped) {
                         isLineJumped = false;
                         continue;
                     }
-    
+
                 } catch (err) {
                     console.error(`行 ${i + 1} の処理でエラー:`, err);
                 }
             }
-    
+
             currentLineIndex++;
         }
-    
+
         if (!isStopped && !isLineJumped) {
             currentLineIndex = 0;
             localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
-            statusDiv.textContent = '再生完了';
+            showToast('再生完了');
             if (textProgressBar) textProgressBar.value = 100;
-            
-            // ★再生完了時にも先頭行（0行目）をハイライト表示
+
             moveCursorToLineStart(0, true);
         }
-    
+
         updateButtonStates(false);
     }
 
-    // 「全文MP3保存（進捗バー更新付き）」処理
     async function generateFullTextMp3() {
         const lines = textInput.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const speakerId = speakerSelect.value;
 
-        if (lines.length === 0) return showToast('🔊 テキストを入力してください。');
+        if (lines.length === 0) return showToast('テキストを入力してください。', 'warning');
 
-        // ★保存中状態へ移行
         isGenerating = true;
         isGenerateCanceled = false;
 
-        // ★ボタンを「❌ 中止」に変更
         btnGenerate.textContent = '❌ 中止';
         btnGenerate.disabled = false;
         btnSpeak.disabled = true;
@@ -860,29 +775,27 @@ document.addEventListener('DOMContentLoaded', async () => {
             const audioBuffers = [];
 
             for (let i = 0; i < lines.length; i++) {
-                // ★ループごとにキャンセルフラグを確認
                 if (isGenerateCanceled) {
-                    statusDiv.textContent = '保存処理を中止しました';
+                    showToast('保存処理を中止しました');
                     return;
                 }
 
                 const progressPercent = Math.round(((i + 1) / lines.length) * 100);
-                
-                statusDiv.textContent = `音声生成中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
+
+                if (statusDiv) statusDiv.textContent = `音声生成中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
                 if (mp3ProgressBar) mp3ProgressBar.value = progressPercent;
 
                 const buffer = await fetchAudioBuffer(lines[i], speakerId);
 
-                // API通信待機後のキャンセル確認
                 if (isGenerateCanceled) {
-                    statusDiv.textContent = '保存処理を中止しました';
+                    showToast('保存処理を中止しました');
                     return;
                 }
 
                 audioBuffers.push(buffer);
             }
 
-            statusDiv.textContent = 'MP3へ変換・保存中...';
+            if (statusDiv) statusDiv.textContent = 'MP3へ変換・保存中...';
 
             let defaultFilename = 'xVoice生成.mp3';
             const generatedPath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
@@ -893,20 +806,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 defaultFilename = `${baseName}.mp3`;
             }
 
-            // MP3変換・書き込み前に最終キャンセル判定
             if (isGenerateCanceled) {
-                statusDiv.textContent = '保存処理を中止しました';
+                showToast('保存処理を中止しました');
                 return;
             }
 
             const success = await window.api.generateAudio(audioBuffers, defaultFilename);
-            statusDiv.textContent = success ? '全文MP3保存が完了しました' : '保存がキャンセルまたは失敗しました';
-
+            if (success) {
+                showToast('保存が完了しました');
+            } else {
+                showToast('保存がキャンセルまたは失敗しました', 'error');
+            }
         } catch (err) {
-            statusDiv.textContent = '保存エラーが発生しました';
+            showToast('保存エラーが発生しました', 'error');
             console.error(err);
         } finally {
-            // ★保存完了または中止時、常にボタン表示・状態を初期状態に戻す
             resetGenerateButton();
 
             setTimeout(() => {
@@ -915,11 +829,99 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // file-path-display のはみ出しチェックとスクロール適用関数
+    // 🔲カーソル指定・レイアウト計算ヘルパー関数🔲
+
+    function moveCursorToLineStart(lineIndex, highlight = isPlaying) {
+        if (!textInput) return;
+        const fullText = textInput.value.replace(/\r\n/g, '\n');
+        const lines = fullText.split('\n');
+        if (lines.length === 0) return;
+
+        const targetIndex = Math.max(0, Math.min(lineIndex, lines.length - 1));
+        let charOffset = 0;
+        for (let i = 0; i < targetIndex; i++) {
+            charOffset += lines[i].length + 1;
+        }
+
+        const currentLineLength = lines[targetIndex].length;
+        textInput.focus({ preventScroll: true });
+        if (highlight) {
+            textInput.setSelectionRange(charOffset, charOffset + currentLineLength);
+        } else {
+            textInput.setSelectionRange(charOffset, charOffset);
+        }
+        scrollTextareaToCharOffset(textInput, charOffset);
+    }
+
+    function scrollTextareaToCharOffset(textarea, charIndex) {
+        const style = window.getComputedStyle(textarea);
+        const isVertical = style.writingMode.startsWith('vertical');
+        const mirror = document.createElement('div');
+        
+        const stylesToCopy = [
+            'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing',
+            'lineHeight', 'textTransform', 'wordBreak', 'overflowWrap', 'whiteSpace',
+            'padding', 'boxSizing', 'direction'
+        ];
+        stylesToCopy.forEach(prop => { mirror.style[prop] = style[prop]; });
+
+        if (isVertical) {
+            mirror.style.writingMode = 'vertical-rl';
+            mirror.style.webkitWritingMode = 'vertical-rl';
+            mirror.style.height = `${textarea.clientHeight}px`;
+            mirror.style.width = 'auto';
+        } else {
+            mirror.style.writingMode = 'horizontal-tb';
+            mirror.style.width = `${textarea.clientWidth}px`;
+            mirror.style.height = 'auto';
+        }
+
+        mirror.style.position = 'absolute';
+        mirror.style.top = '-9999px';
+        mirror.style.left = '-9999px';
+        mirror.style.visibility = 'hidden';
+        mirror.style.overflow = 'hidden';
+
+        const textBefore = textarea.value.substring(0, charIndex);
+        const textAfter = textarea.value.substring(charIndex);
+        const span = document.createElement('span');
+        span.textContent = textAfter.charAt(0) || ' ';
+
+        mirror.textContent = textBefore;
+        mirror.appendChild(span);
+        document.body.appendChild(mirror);
+
+        if (isVertical) {
+            const spanLeft = span.offsetLeft;
+            const spanWidth = span.offsetWidth || parseFloat(style.fontSize);
+            const mirrorWidth = mirror.scrollWidth;
+            document.body.removeChild(mirror);
+
+            const charCenterFromRight = mirrorWidth - (spanLeft + (spanWidth / 2));
+            const clientWidth = textarea.clientWidth;
+            const scrollWidth = textarea.scrollWidth;
+            const targetOffsetFromRight = charCenterFromRight - (clientWidth / 2);
+
+            let targetScrollLeft = -targetOffsetFromRight;
+            if (targetScrollLeft > 0) targetScrollLeft = 0;
+            const maxNegativeScroll = -(scrollWidth - clientWidth);
+            if (targetScrollLeft < maxNegativeScroll) targetScrollLeft = maxNegativeScroll;
+
+            textarea.scrollLeft = targetScrollLeft;
+        } else {
+            const spanTop = span.offsetTop;
+            const spanHeight = span.offsetHeight || parseFloat(style.fontSize);
+            document.body.removeChild(mirror);
+
+            const clientHeight = textarea.clientHeight;
+            const targetTop = spanTop - (clientHeight / 2) + (spanHeight / 2);
+            textarea.scrollTop = Math.max(0, targetTop);
+        }
+    }
+
     function updateFilePathMarquee() {
         if (!filePathDisplay) return;
 
-        // 現在表示されているテキストを取得
         const firstItem = filePathDisplay.querySelector('.marquee-item');
         const currentText = firstItem ? firstItem.textContent.trim() : filePathDisplay.textContent.trim();
 
@@ -928,7 +930,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        // アニメーション用に同じテキストを2つ並べた構造を生成
         filePathDisplay.innerHTML = `
             <span class="file-path-text">
                 <span class="marquee-item">${currentText}</span>
@@ -940,40 +941,54 @@ document.addEventListener('DOMContentLoaded', async () => {
         const itemElem = filePathDisplay.querySelector('.marquee-item');
         if (!textSpan || !itemElem) return;
 
-        // レイアウト確定後に幅を取得してアニメーションを適用
         requestAnimationFrame(() => {
             const containerWidth = filePathDisplay.clientWidth;
-            // 余白（padding-right）を含めた1要素分の全幅
             const singleItemWidth = itemElem.getBoundingClientRect().width;
 
-            // 1要素分の幅がコンテナ領域を超えている場合のみスクロールを有効化
             if (singleItemWidth > containerWidth) {
-                const speed = 100; // スクロール速度 (px/秒)
+                const speed = 100;
                 const duration = singleItemWidth / speed;
 
                 textSpan.style.setProperty('--marquee-duration', `${duration}s`);
                 textSpan.classList.add('scrolling');
             } else {
-                // 収まる場合は通常のテキスト表示に戻す
                 filePathDisplay.innerHTML = `<span class="file-path-text">${currentText}</span>`;
             }
         });
     }
 
-    // オーバーレイメッセージ（トースト）を表示する関数
-    // @param {string} message - 表示するテキスト
-    function showToast(message) {
+    // 呼び出し例:
+    // showToast('処理が完了しました', 'info');
+    // showToast('接続を確認してください', 'warning');
+    // showToast('エラーが発生しました', 'error');
+    function showToast(message, type = 'info') {
         if (!toastMessage) return;
 
-        // 前回のタイマーが動いていれば解除
         if (toastTimer) {
             clearTimeout(toastTimer);
         }
 
-        toastMessage.textContent = message;
-        toastMessage.classList.remove('hidden');
+        // タイプ別アイコンの定義
+        const icons = {
+            info: 'ℹ️',
+            warning: '⚠️',
+            error: '🚫'
+        };
 
-        // 3秒後 (3000ms) に非表示にする
+        // 該当するアイコン（未指定・不正な場合は info）を取得
+        const icon = icons[type] || icons.info;
+
+        // 既存のタイプ別クラスを一旦削除
+        toastMessage.classList.remove('toast-info', 'toast-warning', 'toast-error');
+        
+        // 指定されたタイプ用のクラスを追加
+        toastMessage.classList.add(`toast-${type}`);
+
+        // アイコン付きでテキストを設定
+        toastMessage.textContent = `${icon} ${message}`;
+        toastMessage.classList.remove('hidden');
+    if (statusDiv) statusDiv.textContent = `${icon} ${message}`;
+
         toastTimer = setTimeout(() => {
             toastMessage.classList.add('hidden');
         }, 3000);
