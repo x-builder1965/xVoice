@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.17.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.18.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -19,14 +19,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     // ショートカットキーと各ボタンのIDのマッピング定義
     const shortcutMap = {
-        'ctrl+t': 'btn-theme',
-        'ctrl+f': 'btn-file-select',
-        'ctrl+c': 'btn-file-clear',
-        'ctrl+n': 'btn-connect',
-        'ctrl+r': 'btn-ruby',
-        'ctrl+s': 'btn-save',
-        'ctrl+p': 'btn-speak',
-        'ctrl+g': 'btn-generate'
+        'ctrl+t': { control: 'btn-theme',       editing: true },
+        'ctrl+f': { control: 'btn-file-select', editing: true },
+        'ctrl+c': { control: 'btn-file-clear',  editing: false },
+        'ctrl+n': { control: 'btn-connect',     editing: true },
+        'ctrl+r': { control: 'btn-ruby',        editing: true },
+        'ctrl+s': { control: 'btn-save',        editing: true },
+        'ctrl+p': { control: 'btn-speak',       editing: true },
+        'ctrl+g': { control: 'btn-generate',    editing: true },
     };
 
     // 🔲DOM定義🔲
@@ -348,24 +348,42 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (e.ctrlKey || e.metaKey) modifiers.push('ctrl');
         if (e.shiftKey) modifiers.push('shift');
         if (e.altKey) modifiers.push('alt');
-
+    
         const mainKey = e.key.toLowerCase();
-
-        // 修飾キー自体（'Control', 'Shift', 'Alt', 'Meta'など）が押されただけの時は処理しない
+    
+        // 修飾キー自体が押されただけの時は処理しない
         if (['control', 'shift', 'alt', 'meta'].includes(mainKey)) {
             return;
         }
-
+    
         modifiers.push(mainKey);
-
+    
         // 'ctrl+s' のような文字列を生成
         const shortcutKey = modifiers.join('+');
-
-        // マッピングに存在するか確認
-        if (shortcutMap[shortcutKey]) {
-            const btn = document.getElementById(shortcutMap[shortcutKey]);
+    
+        // マッピングの取得
+        const shortcutConfig = shortcutMap[shortcutKey];
+    
+        // マッピングが存在するか確認
+        if (shortcutConfig) {
+            // textInput（あるいは入力エリア全般）のフォーカス判定
+            const activeEl = document.activeElement;
+            const isEditing = activeEl && (
+                activeEl.id === 'textInput' || 
+                activeEl.tagName === 'INPUT' || 
+                activeEl.tagName === 'TEXTAREA' || 
+                activeEl.isContentEditable
+            );
+    
+            // 「フォーカス中かつ editing: false」の場合はショートカットを無効化（処理しない）
+            if (isEditing && !shortcutConfig.editing) {
+                return;
+            }
+    
+            // コントロール名（ボタンID）の取得と実行
+            const btn = document.getElementById(shortcutConfig.control);
             if (btn) {
-                e.preventDefault(); // ブラウザ標準動作のキャンセル（保存、検索、印刷など）
+                e.preventDefault(); // ブラウザ標準動作のキャンセル
                 btn.click();        // ボタンクリックを実行
             }
         }
