@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.17.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.19.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -312,9 +312,26 @@ input[type="file"] {
     padding: 5px 10px;
 }
 
+/* プログレスバーのラッパー（コンテナ） */
+.progress-container {
+    position: relative;
+    width: 100%;
+    height: 8px;
+    background-color: var(--input-bg);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-container progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
 /* プログレスバー共通 */
 .engine-progress,
 .text-progress,
+.text-buffer-progress,
 .mp3-progress {
     width: 100%;
     height: 8px;
@@ -322,13 +339,15 @@ input[type="file"] {
     overflow: hidden;
     appearance: none;
     border: none;
-    background-color: var(--input-bg);
+    background-color: transparent; /* 重ね合わせのため透明に設定 */
 }
 
+/* 各プログレスバー背景（WebKit） */
 .engine-progress::-webkit-progress-bar,
 .text-progress::-webkit-progress-bar,
+.text-buffer-progress::-webkit-progress-bar,
 .mp3-progress::-webkit-progress-bar {
-    background-color: var(--input-bg);
+    background-color: transparent;
     border-radius: 4px;
 }
 
@@ -338,8 +357,16 @@ input[type="file"] {
     transition: width 0.3s ease;
 }
 
+/* 再生プログレスバー（前面） */
 .text-progress::-webkit-progress-value {
     background-color: #2196f3;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+/* キャッシュ（バッファ）プログレスバー（背面・淡い青） */
+.text-buffer-progress::-webkit-progress-value {
+    background-color: #90caf9f6; /* 水色 */
     border-radius: 4px;
     transition: width 0.3s ease;
 }
@@ -482,4 +509,13 @@ button, select, input {
 }
 #btn-save.change-active:hover {
     background: #e6394785 !important;   /* 赤系：有効 */
+}
+
+/* プレイヤーの基本スタイル設定 */
+.audio-player-element {
+  width: 100%;
+  height: 40px;
+}
+.hidden-player {
+  display: none !important;
 }
