@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.14.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.15.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -19,14 +19,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     // ショートカットキーと各ボタンのIDのマッピング定義
     const shortcutMap = {
-        't': 'btnTheme',
-        'f': 'btnFileSelect',
-        'c': 'btnFileClear',
-        'n': 'btnConnect',
-        'r': 'btnRuby',
-        's': 'btnSave',
-        'p': 'btnSpeak',
-        'g': 'btnGenerate'
+        'ctrl+t': 'btn-theme',
+        'ctrl+f': 'btn-file-select',
+        'ctrl+c': 'btn-file-clear',
+        'ctrl+n': 'btn-connect',
+        'ctrl+r': 'btn-ruby',
+        'ctrl+s': 'btn-save',
+        'ctrl+p': 'btn-speak',
+        'ctrl+g': 'btn-generate'
     };
 
     // 🔲DOM定義🔲
@@ -329,16 +329,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // キーボードイベントの登録
     document.addEventListener('keydown', (e) => {
-        // Ctrlキー（またはMacのCommandキー）が押されているか判定
-        if (e.ctrlKey || e.metaKey) {
-            const key = e.key.toLowerCase(); // キーを小文字で取得
-    
-            if (shortcutMap[key]) {
-                const btn = document.getElementById(shortcutMap[key]);
-                if (btn) {
-                    e.preventDefault(); // ブラウザ標準のショートカット（保存や検索など）をキャンセル
-                    btn.click();        // 対象ボタンのclickイベントを実行
-                }
+        // 押された修飾キーとメインキーを組み合わせてキー文字列を作成
+        const modifiers = [];
+        
+        // Ctrlキー または MacのCommandキー
+        if (e.ctrlKey || e.metaKey) modifiers.push('ctrl');
+        if (e.shiftKey) modifiers.push('shift');
+        if (e.altKey) modifiers.push('alt');
+
+        const mainKey = e.key.toLowerCase();
+
+        // 修飾キー自体（'Control', 'Shift', 'Alt', 'Meta'など）が押されただけの時は処理しない
+        if (['control', 'shift', 'alt', 'meta'].includes(mainKey)) {
+            return;
+        }
+
+        modifiers.push(mainKey);
+
+        // 'ctrl+s' のような文字列を生成
+        const shortcutKey = modifiers.join('+');
+
+        // マッピングに存在するか確認
+        if (shortcutMap[shortcutKey]) {
+            const btn = document.getElementById(shortcutMap[shortcutKey]);
+            if (btn) {
+                e.preventDefault(); // ブラウザ標準動作のキャンセル（保存、検索、印刷など）
+                btn.click();        // ボタンクリックを実行
             }
         }
     });
