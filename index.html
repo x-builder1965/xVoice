@@ -1,9 +1,15 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.15.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.16.0';
  ---------------------------------------------------------------------
  【変更履歴】
+ 【未実装】
+ 2026-09-XX Ver1.XX.0 起動時の引数にテキストファイル（.txt）を指定機能の追加。
+ 2026-09-XX Ver1.XX.0 テキストの変更状況の表示機能を追加。
+ 2026-09-XX Ver1.XX.0 バックグラウンドで先読み音声合成（キャッシュ）機能の追加。
+ 【実装済】
+ 2026-09-11 Ver1.16.0 再生中・生成中の「❌切断」の使用不可の対応。
  2026-09-11 Ver1.15.0 ショートカットキー押下時の動作不良の対応。
  2026-09-11 Ver1.14.0 読み編集機能追加、各ボタンのショートカットキー追加。
  2026-09-11 Ver1.13.0 エンジン接続アドレス追加と接続条件の見直し。
@@ -34,7 +40,7 @@
         <div class="header">
             <h1 class="app-title">
                 <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
-                xVoice -テキスト音声読み上げ- Ver1.14.0
+                xVoice -テキスト音声読み上げ- Ver1.16.0
             </h1>
             <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替" title="テーマ切替 (Ctrl+t)">☀️</button>
         </div>

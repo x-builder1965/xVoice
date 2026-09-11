@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.15.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.16.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -641,6 +641,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (btnGenerate && !isGenerating) {
             btnGenerate.disabled = playing || !isEngineReady || !textInput.value.trim();
         }
+        if (btnConnect) btnConnect.disabled = playing || isGenerating;
         if (btnFileClear) btnFileClear.disabled = playing || isGenerating;
         if (btnFileSelect) btnFileSelect.disabled = playing || isGenerating;
         if (fontSizeSelect) fontSizeSelect.disabled = playing || isGenerating;
@@ -656,6 +657,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnGenerate.title = '音声生成 (Ctrl+g)';
             btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
         }
+        if (btnConnect) btnConnect.disabled = false;
         if (btnSpeak) btnSpeak.disabled = !isEngineReady;
         if (btnFileSelect) btnFileSelect.disabled = false;
         if (btnFileClear) btnFileClear.disabled = false;
@@ -858,6 +860,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnGenerate.title = '生成中止 (Ctrl+g)';
         btnGenerate.disabled = false;
         btnSpeak.disabled = true;
+        if (btnConnect) btnConnect.disabled = true;
         if (btnFileSelect) btnFileSelect.disabled = true;
         if (btnFileClear) btnFileClear.disabled = true;
         if (fontSizeSelect) fontSizeSelect.disabled = true;
