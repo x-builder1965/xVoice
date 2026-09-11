@@ -1,13 +1,14 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.13.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.14.0';
  ---------------------------------------------------------------------
  【変更履歴】
+ 2026-09-11 Ver1.14.0 読み編集機能追加、各ボタンのショートカットキー追加。
  2026-09-11 Ver1.13.0 エンジン接続アドレス追加と接続条件の見直し。
  2026-09-10 Ver1.12.0 テキスト保存機能の追加。
  2026-09-10 Ver1.11.0 イベント・関数の見直し整理。
- 2026-09-10 Ver1.10.0 テキスト音声生成時の変換ルビの対応。
+ 2026-09-10 Ver1.10.0 テキスト音声生成時の変換読みの対応。
  2026-09-10 Ver1.09.0 「💾保存」の「❌中止」機能を追加。
  2026-09-10 Ver1.08.0 テキストにマウスオーバー時のマウス形状を改善。
  2026-09-10 Ver1.07.0 再生停止時のハイライト表示を改善。
@@ -32,9 +33,9 @@
         <div class="header">
             <h1 class="app-title">
                 <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
-                xVoice -テキスト音声読み上げ- Ver1.12.0
+                xVoice -テキスト音声読み上げ- Ver1.14.0
             </h1>
-            <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替">☀️</button>
+            <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替" title="テーマ切替 (Ctrl+t)">☀️</button>
         </div>
 
         <!-- トースト通知用オーバーレイ -->
@@ -44,7 +45,7 @@
         <div class="field">
             <div class="file-input-group">
                 <select id="speaker"><option value="">エンジン起動確認中...</option></select>
-                <button id="btn-connect" class="file-select-btn" type="button">🔄 接続</button>
+                <button id="btn-connect" class="file-select-btn" type="button" title="AivisSpeech Engine接続 (Ctrl+n)">🔄 接続</button>
                 <input type="text" id="input-address" placeholder="http://127.0.0.1:10101" title="サーバーアドレス">
             </div>
         </div>
@@ -58,16 +59,17 @@
                     <option value="20px">大</option>
                     <option value="24px">特大</option>
                 </select>
-                <select id="writing-mode-select" title="テキスト表示向き">
+                <select id="writing-mode-select" title="テキスト向き">
                     <option value="horizontal-tb" selected>横向き</option>
                     <option value="vertical-rl">縦向き</option>
                 </select>
-                <button id="btn-file-select" class="btn-primary">📁 ファイル選択</button>
+                <button id="btn-file-select" class="btn-primary" title="ファイル選択 (Ctrl+f)">📁 ファイル選択</button>
                 <span id="file-path-display" class="file-path-display">選択されていません</span>
-                <button id="btn-speak" class="btn-primary">▶️ 再生</button>
-                <button id="btn-generate" class="btn-secondary">🔊 生成</button>
-                <button id="btn-save" class="btn-primary">💾 保存</button>
-                <button id="btn-file-clear" class="file-select-btn" type="button">🗑️ クリア</button>
+                <button id="btn-speak" class="btn-primary" title="再生 (Ctrl+p)">▶️ 再生</button>
+                <button id="btn-generate" class="btn-secondary" title="音声生成 (Ctrl+g)">🔊 生成</button>
+                <button id="btn-ruby" class="btn-primary" title="読み編集 (Ctrl+r)">🖊️読み</button>
+                <button id="btn-save" class="btn-primary" title="テキスト保存 (Ctrl+s)">💾 保存</button>
+                <button id="btn-file-clear" class="file-select-btn" type="button" title="テキストクリア (Ctrl+c)">🗑️ クリア</button>
             </div>
         </div>
 
@@ -78,7 +80,7 @@
         <!-- ステータス・プログレスバー部分 -->
         <div class="field">
             <progress id="engine-progress" value="0" max="100" class="engine-progress" hidden></progress>
-            <progress id="text-progress" value="0" max="100" class="text-progress" hidden></hidden>
+            <progress id="text-progress" value="0" max="100" class="text-progress" hidden></progress>
             <progress id="mp3-progress" value="0" max="100" class="mp3-progress" hidden></progress>
         </div>
         <div class="status" id="status">AivisSpeech Engineに接続中...</div>

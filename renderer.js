@@ -1,12 +1,11 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.13.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.14.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
     const DEFAULT_HOST = 'http://127.0.0.1:10101';
-
     // --- localStorage保存・復元用キー定数 ---
     const STORAGE_KEYS = {
         FILE_PATH: 'xVoice_filePath',
@@ -17,6 +16,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         SPEAKER: 'xVoice_speaker',
         TEXT_DIRECTION: 'xVoice_textDirection',
         SERVER_ADDRESS: 'xVoice_serverAddress'
+    };
+    // ショートカットキーと各ボタンのIDのマッピング定義
+    const shortcutMap = {
+        't': 'btnTheme',
+        'f': 'btnFileSelect',
+        'c': 'btnFileClear',
+        'n': 'btnConnect',
+        'r': 'btnRuby',
+        's': 'btnSave',
+        'p': 'btnSpeak',
+        'g': 'btnGenerate'
     };
 
     // 🔲DOM定義🔲
@@ -30,6 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let textInput = null;
     let fontSizeSelect = null;
     let btnFileClear = null;
+    let btnRuby = null;
     let btnSave = null;
     let btnSpeak = null;
     let btnGenerate = null;
@@ -97,7 +108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentLineIndex = parseInt(savedLineIndex, 10) || 0;
     }
 
-    // テキスト表示向きの復元
+    // テキスト向きの復元
     const savedTextDirection = localStorage.getItem(STORAGE_KEYS.TEXT_DIRECTION) || 'horizontal-tb';
     applyTextDirection(savedTextDirection);
 
@@ -131,7 +142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         applyFontSize(e.target.value);
     });
 
-    // テキスト表示向きの変更イベント
+    // テキスト向きの変更イベント
     writingModeSelect?.addEventListener('change', (e) => {
         applyTextDirection(e.target.value);
     });
@@ -235,6 +246,53 @@ document.addEventListener('DOMContentLoaded', async () => {
         await handleConnectToggle();
     });
 
+    // 読み編集クリックイベント
+    btnRuby.addEventListener('click', (e) => {
+        // ボタンクリックによるフォーカス移動を防止
+        e.preventDefault();
+    
+        const text = textInput.value;
+        const start = textInput.selectionStart;
+        const end = textInput.selectionEnd;
+    
+        // 現在のカーソル位置/選択範囲が含まれている「｛...｝」を探す
+        const lastOpen = text.lastIndexOf('｛', start);
+        const nextClose = text.indexOf('｝', start);
+    
+        // 1. カーソルが「｛」と「｝」の間にあり、その中に「｜」が含まれているか判定（読み解除の判定）
+        if (lastOpen !== -1 && nextClose !== -1 && lastOpen < nextClose) {
+            // 「｛」から「｝」までの部分文字列を取得
+            const rubyBlock = text.substring(lastOpen, nextClose + 1);
+    
+            // 「｛本体テキスト｜読み文字｝」の形式かチェック（「｜」が存在するか）
+            const pipeIndex = rubyBlock.indexOf('｜');
+            if (pipeIndex !== -1) {
+                // 読み構造から「本体テキスト」部分のみ抽出（「｛」の後ろから「｜」の前まで）
+                const bodyText = rubyBlock.substring(1, pipeIndex);
+    
+                // 読み構文全体（｛...｜...｝）を選択状態にする
+                textInput.focus();
+                textInput.setSelectionRange(lastOpen, nextClose + 1);
+    
+                // 読み構文を本体テキストで置換（読み削除）
+                document.execCommand('insertText', false, bodyText);
+                return;
+            }
+        }
+    
+        // 2. 読み内にいない場合は、選択領域に読み構文を付与
+        const selectedText = text.substring(start, end);
+        const rubyFormatted = `｛${selectedText}｜｝`;
+    
+        textInput.focus();
+        document.execCommand('insertText', false, rubyFormatted);
+    
+        // 「｜」と「｝」の間の位置を計算してカーソルを移動
+        // （開始位置 + 「｛」の1文字 + 選択文字列の長さ + 「｜」の1文字）
+        const targetCursorPos = start + 1 + selectedText.length + 1;
+        textInput.setSelectionRange(targetCursorPos, targetCursorPos);
+    });
+
     // 保存ボタンクリックイベント
     btnSave?.addEventListener('click', async () => {
         if (!textInput.value.trim()) {
@@ -266,6 +324,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnGenerate.disabled = true;
         } else {
             generateFullTextMp3();
+        }
+    });
+
+    // キーボードイベントの登録
+    document.addEventListener('keydown', (e) => {
+        // Ctrlキー（またはMacのCommandキー）が押されているか判定
+        if (e.ctrlKey || e.metaKey) {
+            const key = e.key.toLowerCase(); // キーを小文字で取得
+    
+            if (shortcutMap[key]) {
+                const btn = document.getElementById(shortcutMap[key]);
+                if (btn) {
+                    e.preventDefault(); // ブラウザ標準のショートカット（保存や検索など）をキャンセル
+                    btn.click();        // 対象ボタンのclickイベントを実行
+                }
+            }
         }
     });
 
@@ -308,6 +382,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         textInput = document.getElementById('text');
         fontSizeSelect = document.getElementById('font-size-select');
         btnFileClear = document.getElementById('btn-file-clear');
+        btnRuby = document.getElementById('btn-ruby');
         btnSave = document.getElementById('btn-save');
         btnSpeak = document.getElementById('btn-speak');
         btnGenerate = document.getElementById('btn-generate');
@@ -404,9 +479,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 接続状態に応じたUI切り替えヘルパー
     function updateConnectionUI(connected) {
         if (!btnConnect || !inputAddress) return;
-    
+
         if (connected) {
             btnConnect.textContent = '❌ 切断';
+            btnConnect.title = 'AivisSpeech Engine切断 (Ctrl+n)'; // 接続時：切断用のツールチップ
             btnConnect.disabled = false;
             inputAddress.disabled = true; // 接続時はアドレス編集不可
             
@@ -418,6 +494,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (writingModeSelect) writingModeSelect.disabled = false;
         } else {
             btnConnect.textContent = '🔄 接続';
+            btnConnect.title = 'AivisSpeech Engine接続 (Ctrl+n)'; // 未接続時：接続用のツールチップ
             btnConnect.disabled = false;
             inputAddress.disabled = false; // 未接続時はアドレス編集可能
             
@@ -541,6 +618,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (btnSpeak) {
             btnSpeak.textContent = playing ? '⏹️停止' : '▶️再生';
+            btnSpeak.title = playing ? '停止 (Ctrl+p)' : '再生 (Ctrl+p)';
             textInput.style.cursor = playing ? 'pointer' : 'text';
         }
 
@@ -559,6 +637,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         isGenerateCanceled = false;
         if (btnGenerate) {
             btnGenerate.textContent = '🔊 生成';
+            btnGenerate.title = '音声生成 (Ctrl+g)';
             btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
         }
         if (btnSpeak) btnSpeak.disabled = !isEngineReady;
@@ -760,6 +839,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         isGenerateCanceled = false;
 
         btnGenerate.textContent = '❌ 中止';
+        btnGenerate.title = '生成中止 (Ctrl+g)';
         btnGenerate.disabled = false;
         btnSpeak.disabled = true;
         if (btnFileSelect) btnFileSelect.disabled = true;
@@ -776,7 +856,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             for (let i = 0; i < lines.length; i++) {
                 if (isGenerateCanceled) {
-                    showToast('保存処理を中止しました');
+                    showToast('生成処理を中止しました');
                     return;
                 }
 
@@ -788,7 +868,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const buffer = await fetchAudioBuffer(lines[i], speakerId);
 
                 if (isGenerateCanceled) {
-                    showToast('保存処理を中止しました');
+                    showToast('生成処理を中止しました');
                     return;
                 }
 
@@ -807,18 +887,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             if (isGenerateCanceled) {
-                showToast('保存処理を中止しました');
+                showToast('生成処理を中止しました');
                 return;
             }
 
             const success = await window.api.generateAudio(audioBuffers, defaultFilename);
             if (success) {
-                showToast('保存が完了しました');
+                showToast('生成が完了しました');
             } else {
-                showToast('保存がキャンセルまたは失敗しました', 'error');
+                showToast('生成がキャンセルまたは失敗しました', 'error');
             }
         } catch (err) {
-            showToast('保存エラーが発生しました', 'error');
+            showToast('生成エラーが発生しました', 'error');
             console.error(err);
         } finally {
             resetGenerateButton();

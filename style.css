@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.13.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.14.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -435,4 +435,43 @@ input[type="text"]:disabled {
 .toast.hidden {
     opacity: 0;
     transform: translate(-50%, -10px);
+}
+
+/* --- Electron用：ボタン上のマウス操作とホバー判定を復元 --- */
+button, select, input {
+    -webkit-app-region: no-drag;
+}
+
+/* --- カスタムツールチップ実装 --- */
+[title] {
+    position: relative;
+}
+
+/* ツールチップ本体（ボタン上部に黒背景で表示） */
+[title]::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    font-size: 0.75rem;
+    font-weight: normal;
+    white-space: nowrap;
+    border-radius: 4px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+    pointer-events: none; /* マウス操作を邪魔しない */
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* ボタンホバー時にツールチップを表示 */
+[title]:hover::after {
+    opacity: 1;
+    visibility: visible;
 }
