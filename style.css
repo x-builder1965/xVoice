@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.14.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.17.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -474,4 +474,12 @@ button, select, input {
 [title]:hover::after {
     opacity: 1;
     visibility: visible;
+}
+
+/* 保存ボタンの変更を表示 */
+#btn-save.change-active {
+    background: #e63946 !important;     /* 赤系：有効 */
+}
+#btn-save.change-active:hover {
+    background: #e6394785 !important;   /* 赤系：有効 */
 }

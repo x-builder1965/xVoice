@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.16.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.17.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -59,6 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let isLineJumped = false;     // 再生中の行ジャンプ用フラグ
     let currentLineIndex = 0;     // 再開位置を保持する行インデックス
     let previousText = '';         // テキスト内容の変更検知用
+    let textBackup = '';
     let isGenerating = false;
     let isGenerateCanceled = false;
     let isEngineReady = false;    // エンジン接続状態フラグ
@@ -100,6 +101,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const normalizedSavedText = savedText.replace(/\r\n/g, '\n');
         textInput.value = normalizedSavedText;
         previousText = normalizedSavedText;
+        textBackup = normalizedSavedText;
+        btnSave.classList.remove('change-active');
     }
 
     // 再生位置の復元
@@ -219,6 +222,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         currentLineIndex = 0;
         previousText = '';
+        textBackup = '';
+        btnSave.classList.remove('change-active');
 
         localStorage.removeItem(STORAGE_KEYS.FILE_PATH);
         localStorage.removeItem(STORAGE_KEYS.TEXT);
@@ -232,11 +237,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             btnGenerate.disabled = !isEngineReady || !currentText.trim();
         }
 
-        if (currentText !== previousText) {
-            currentLineIndex = 0;
-            previousText = currentText;
-            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+        // テキストの変更表示
+        if (currentText !== textBackup) {
+            btnSave.classList.add('change-active');
+        } else {
+            btnSave.classList.remove('change-active');
         }
+
+        // if (currentText !== previousText) {
+        //    currentLineIndex = 0;
+        //    previousText = currentText;
+        //    localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+        // }
 
         localStorage.setItem(STORAGE_KEYS.TEXT, currentText);
     });
@@ -506,8 +518,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (btnSpeak) btnSpeak.disabled = false;
             if (btnGenerate) btnGenerate.disabled = false;
             if (speakerSelect) speakerSelect.disabled = false;
-            if (fontSizeSelect) fontSizeSelect.disabled = false;
-            if (writingModeSelect) writingModeSelect.disabled = false;
+            // if (fontSizeSelect) fontSizeSelect.disabled = false;
+            // if (writingModeSelect) writingModeSelect.disabled = false;
         } else {
             btnConnect.textContent = '🔄 接続';
             btnConnect.title = 'AivisSpeech Engine接続 (Ctrl+n)'; // 未接続時：接続用のツールチップ
@@ -518,8 +530,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (btnSpeak) btnSpeak.disabled = true;
             if (btnGenerate) btnGenerate.disabled = true;
             if (speakerSelect) speakerSelect.disabled = true;
-            if (fontSizeSelect) fontSizeSelect.disabled = true;
-            if (writingModeSelect) writingModeSelect.disabled = true;
+            // if (fontSizeSelect) fontSizeSelect.disabled = true;
+            // if (writingModeSelect) writingModeSelect.disabled = true;
         }
     }
 
@@ -618,6 +630,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (textInput) textInput.value = loadedText;
         previousText = loadedText;
+        textBackup = loadedText;
+        btnSave.classList.remove('change-active');
         currentLineIndex = 0;
         isFirstPlay = true;
 
@@ -742,14 +756,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (!fullText.trim()) return showToast('テキストを入力してください', 'warning');
 
-        const normalizedPreviousText = previousText.replace(/\r\n/g, '\n');
-
-        if (normalizedPreviousText !== '' && fullText !== normalizedPreviousText) {
-            currentLineIndex = 0;
-            isFirstPlay = true;
-        } else {
+        // const normalizedPreviousText = previousText.replace(/\r\n/g, '\n');
+        // if (normalizedPreviousText !== '' && fullText !== normalizedPreviousText) {
+        //     currentLineIndex = 0;
+        //     isFirstPlay = true;
+        // } else {
             currentLineIndex = getCursorLineIndex();
-        }
+        // }
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
 
         previousText = fullText;
