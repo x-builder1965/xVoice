@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.19.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.20.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -81,7 +81,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // 音量設定の復元
-    setupAudioPlayerSynchronization();
+    const savedVolume = localStorage.getItem(STORAGE_KEYS.VOLUME) || '0.2';
+    if (audioPlayer) {
+        audioPlayer.volume = savedVolume;
+    }
+    if (audioPlayerNext) {
+        audioPlayerNext.volume = savedVolume;
+    }
 
     // フォントサイズ選択の復元
     const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
@@ -171,6 +177,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!fileData) return;
         loadFileContent(fileData.path, fileData.content);
     });
+
+    // 音量設定の変更イベントリスナー
+    setupAudioPlayerSynchronization();
 
     // Ｄ＆Ｄ イベントリスナー
     document.addEventListener('dragover', (e) => {
