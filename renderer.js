@@ -442,6 +442,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const result = await window.api.saveTextFile(textInput.value, currentPath);
         if (result.success) {
             console.log('保存完了:', result.filePath);
+            textBackup = textInput.value;
+            btnSave.classList.remove('change-active');
         }
     });
 
