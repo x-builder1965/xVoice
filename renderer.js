@@ -1445,6 +1445,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (audioPlayerNext.muted !== audioPlayer.muted) {
                 audioPlayerNext.muted = audioPlayer.muted;
             }
+            localStorage.setItem(STORAGE_KEYS.VOLUME, audioPlayer.volume);
         });
     
         // audioPlayerNext の音量・ミュート変更を audioPlayer に同期
@@ -1455,6 +1456,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (audioPlayer.muted !== audioPlayerNext.muted) {
                 audioPlayer.muted = audioPlayerNext.muted;
             }
+            localStorage.setItem(STORAGE_KEYS.VOLUME, audioPlayerNext.volume);
         });
     }
 });
