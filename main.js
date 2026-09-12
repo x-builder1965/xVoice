@@ -247,15 +247,10 @@ function checkEngineHealth(address = DEFAULT_AIVIS_HOST) {
     });
 }
 
-// プロセス存在確認関数 (PIDまたはイメージ名指定)
-function checkProcessRunning(target) {
+// プロセス存在確認関数 (イメージ名指定)
+function checkProcessRunning(exeName = ENGINE_EXE) {
     return new Promise((resolve) => {
-        // targetが数値(PID)の場合は /FI "PID eq 9728"、文字列の場合は /FI "IMAGENAME eq run.exe"
-        const filter = typeof target === 'number' || !isNaN(target) 
-            ? `PID eq ${target}` 
-            : `IMAGENAME eq ${target}`;
-
-        exec(`tasklist /FI "${filter}" /NH`, (error, stdout) => {
+        exec(`tasklist /FI "IMAGENAME eq ${exeName}" /NH`, (error, stdout) => {
             if (error || !stdout) {
                 resolve(false);
                 return;
@@ -267,16 +262,16 @@ function checkProcessRunning(target) {
     });
 }
 
-// Engine起動状態確認＆起動処理
+// イメージ名指定での起動確認を含めた Engine起動状態確認＆起動処理
 async function startAivisEngine(address = DEFAULT_AIVIS_HOST) {
-    // 1. 指定のPID(9728)またはイメージ名でプロセスが生存しているか確認
-    const isPidRunning = await checkProcessRunning(9728);
+    // 1. イメージ名(run.exe)でプロセスが生存しているか確認
+    const isProcessRunning = await checkProcessRunning(ENGINE_EXE);
     
     // 2. HTTPヘルスチェック
     const isHttpHealthy = await checkEngineHealth(address);
 
     // プロセスが存在し、かつHTTP応答もある場合
-    if (isPidRunning && isHttpHealthy) {
+    if (isProcessRunning && isHttpHealthy) {
         if (mainWindow) {
             const progressData = { current: 60, total: 60, isRunning: true };
             mainWindow.webContents.send('engine-progress-update', progressData);
