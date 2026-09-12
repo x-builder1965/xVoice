@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.25.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.26.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -209,6 +209,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnFileSelect?.addEventListener('click', async () => {
         const fileData = await window.api.selectFile();
         if (!fileData) return;
+    
+        // ★ ファイル変更時のリセット処理
+        if (isPlaying) {
+            stopPlayback(); // 再生中の場合は停止
+        }
+        clearAudioCache();   // キャッシュクリア
+        resetProgressBars(); // 進捗バーを0%にリセット
+    
         loadFileContent(fileData.path, fileData.content);
     });
 
@@ -263,12 +271,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateFilePathMarquee();
         if (textInput) textInput.value = '';
         if (btnGenerate) btnGenerate.disabled = true;
-
+    
         currentLineIndex = 0;
         previousText = '';
         textBackup = '';
         btnSave.classList.remove('change-active');
-
+    
+        // ★ クリア時のリセット処理
+        if (isPlaying) {
+            stopPlayback(); // 再生中の場合は停止
+        }
+        clearAudioCache();   // キャッシュクリア
+        resetProgressBars(); // 進捗バーを0%にリセット
+    
         localStorage.removeItem(STORAGE_KEYS.FILE_PATH);
         localStorage.removeItem(STORAGE_KEYS.TEXT);
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
@@ -294,6 +309,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 「🔄 接続 / ❌ 切断」トグルボタンのクリックイベント
     btnConnect?.addEventListener('click', async () => {
         await handleConnectToggle();
+    });
+
+    // 話者変更時
+    speakerSelect.addEventListener('change', () => {
+        clearAudioCache();
+        // 必要に応じてプリフェッチのリセットや停止処理
+    });
+
+    // テキスト変更時
+    textInput.addEventListener('input', () => {
+        // テキストが変わったら古いキャッシュは無効化する
+        clearAudioCache();
     });
 
     // 読み編集クリックイベント
@@ -809,16 +836,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // カーソル（再生位置）変更時の処理
     function handleCursorChange() {
-        if (!isPlaying) return;
-
+        // 修正前: if (!isPlaying) return;  ← これを削除
+    
         const targetLineIndex = getCursorLineIndex();
         if (targetLineIndex !== currentLineIndex) {
             currentLineIndex = targetLineIndex;
             localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
-
-            isLineJumped = true;
+    
+            // キャッシュとバッファ表示をクリア＆移動後の位置に同期
             clearAudioCache();
-            stopAllAudioPlayers();
+    
+            if (isPlaying) {
+                isLineJumped = true;
+                stopAllAudioPlayers();
+            }
         }
     }
 
@@ -943,7 +974,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!isPlaying) return;
 
         isStopped = true;
-        clearAudioCache(); // 停止時にもキャッシュを完全にクリア
+        // clearAudioCache(); // 停止時にもキャッシュを完全にクリア
         stopAllAudioPlayers();
 
         if (statusDiv) statusDiv.textContent = `停止しました (${currentLineIndex + 1} 行目で停止中)`;
@@ -956,42 +987,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function playLineByLine() {
         const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.split('\n');
-
+    
         if (!fullText.trim()) return showToast('テキストを入力してください', 'warning');
-
+    
+        // 前回再生時とテキストが異なっていればクリア（万一イベントで拾えなかった場合の保険）
+        if (previousText !== fullText) {
+            clearAudioCache();
+            previousText = fullText;
+        }
+    
         currentLineIndex = getCursorLineIndex();
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
-
-        previousText = fullText;
+    
         isFirstPlay = false;
-
+    
         if (currentLineIndex >= lines.length) {
             currentLineIndex = 0;
             localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
         }
-
+    
         updateButtonStates(true);
         isStopped = false;
         isLineJumped = false;
-
-        clearAudioCache();
+    
         stopAllAudioPlayers();
         
         const currentSpeakerId = speakerSelect.value;
-
+    
         showProgressBar('text');
         const initialPercent = Math.round((currentLineIndex / lines.length) * 100);
         if (textProgressBar) textProgressBar.value = initialPercent;
         if (textBufferProgressBar) textBufferProgressBar.value = initialPercent;
-
-        // 初回の先読みを実行
+    
+        // 先読みの実行（キャッシュにあるものはスキップするよう triggerPrefetch 側で制御を推薦）
         triggerPrefetch(lines, currentSpeakerId);
-
-        // ダブルバッファリング用プレイヤーの配列 (既存の audioPlayer をそのまま使用)
+    
         const players = [audioPlayer, audioPlayerNext];
         let activePlayerIndex = 0;
     
-        // 初期状態の表示をリセット
         updatePlayerVisibility(activePlayerIndex);
     
         while (currentLineIndex < lines.length) {
@@ -1016,13 +1049,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     let audioData;
                     
+                    // キャッシュの存在確認（見つかれば再利用）
                     if (audioCache.has(i)) {
                         audioData = audioCache.get(i);
                     } else {
                         audioData = await fetchAudioBuffer(lineTrimmed, currentSpeakerId);
+                        // ※ fetchAudioBuffer 内で audioCache.set(i, audioData) されている前提
                     }
     
-                    audioCache.delete(i);
+                    // ★ 修正点: 以前あった audioCache.delete(i); は削除します
+                    // （削除しないことで、停止後の再再生時にもこのキャッシュを活用できます）
+    
                     triggerPrefetch(lines, currentSpeakerId);
     
                     if (isStopped || isLineJumped) {
@@ -1036,29 +1073,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                         break;
                     }
     
-                    // 現在再生を担当するプレイヤー
                     const currentPlayer = players[activePlayerIndex];
-
-                    // 1. まず先に画面の表示・非表示を切り替える
                     updatePlayerVisibility(activePlayerIndex);
-
+    
                     const blob = new Blob([audioData], { type: 'audio/wav' });
                     const blobUrl = URL.createObjectURL(blob);
-
+    
                     currentPlayer.src = blobUrl;
-
-                    // 次の行が存在する場合、もう一方の非表示プレイヤーへプリロード
+    
                     const nextLineIndex = i + 1;
                     const nextPlayer = players[1 - activePlayerIndex];
-
+    
                     if (nextLineIndex < lines.length && audioCache.has(nextLineIndex)) {
                         const nextAudioData = audioCache.get(nextLineIndex);
                         const nextBlob = new Blob([nextAudioData], { type: 'audio/wav' });
                         nextPlayer.src = URL.createObjectURL(nextBlob);
-                        nextPlayer.load(); // 事前ロード実行
+                        nextPlayer.load();
                     }
-
-                    // 2. 表示更新後に再生を開始
+    
                     await new Promise((resolve) => {
                         const checkStopped = setInterval(() => {
                             if (isStopped || isLineJumped) {
@@ -1066,7 +1098,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 resolve();
                             }
                         }, 100);
-
+    
                         currentPlayer.onended = () => {
                             clearInterval(checkStopped);
                             URL.revokeObjectURL(blobUrl);
@@ -1077,10 +1109,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                             URL.revokeObjectURL(blobUrl);
                             resolve();
                         };
-
+    
                         currentPlayer.play().catch(() => resolve());
                     });
-                    
+    
                     if (isLineJumped) {
                         isLineJumped = false;
                         clearAudioCache();
@@ -1089,7 +1121,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         continue;
                     }
     
-                    // 次の行のためにアクティブプレイヤーを切り替え (0 <-> 1)
                     activePlayerIndex = 1 - activePlayerIndex;
     
                 } catch (err) {
@@ -1103,10 +1134,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     
         // 後処理
-        clearAudioCache();
         stopAllAudioPlayers();
     
+        // ★ 修正点: ループ末尾にあった無条件の clearAudioCache(); を削除
+        // （最後まで再生完了した時のみクリアしたい場合は以下の中に記述）
         if (!isStopped && !isLineJumped) {
+            clearAudioCache(); // 最後まで再生しきった場合のみクリア
             currentLineIndex = 0;
             localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
             showToast('再生完了');
@@ -1379,7 +1412,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     function clearAudioCache() {
         audioCache.clear();
         if (textBufferProgressBar) {
-            textBufferProgressBar.value = textProgressBar ? textProgressBar.value : 0;
+            const fullText = textInput.value.replace(/\r\n/g, '\n');
+            const lines = fullText.split('\n');
+            
+            // 移動先の行インデックスに基づいてバッファバーの位置を同期
+            const currentPercent = lines.length > 0 
+                ? Math.round((currentLineIndex / lines.length) * 100) 
+                : 0;
+    
+            textBufferProgressBar.value = currentPercent;
         }
     }
     
@@ -1491,5 +1532,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             localStorage.setItem(STORAGE_KEYS.VOLUME, audioPlayerNext.volume);
         });
+    }
+
+    // 進捗バーを 0% (リセット状態) に戻す共通関数
+    function resetProgressBars() {
+        if (textProgressBar) textProgressBar.value = 0;
+        if (textBufferProgressBar) textBufferProgressBar.value = 0;
     }
 });
