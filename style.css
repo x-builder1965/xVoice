@@ -514,9 +514,9 @@ button, select, input {
 
 /* プレイヤーの基本スタイル設定 */
 .audio-player-element {
-  width: 100%;
-  height: 40px;
+    width: 100%;
+    height: 40px;
 }
 .hidden-player {
-  display: none !important;
+    display: none !important;
 }

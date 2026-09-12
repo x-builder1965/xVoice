@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.23.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.24.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -47,6 +47,21 @@ app.on('window-all-closed', () => {
 });
 
 // 🔲IPC ハンドラー登録🔲
+// 起動時引数取得ハンドラー（★２）
+ipcMain.handle('get-launch-args', async () => {
+    const filePath = getArgFilePath();
+    if (filePath) {
+        const fileData = readTextFile(filePath);
+        if (fileData) {
+            return {
+                filePath: fileData.path,
+                content: fileData.content
+            };
+        }
+    }
+    return null;
+});
+
 // アプリ起動時の初期化チェック（動的アドレス指定対応）
 ipcMain.handle('init-engine', async (event, address = DEFAULT_AIVIS_HOST) => {
     const isHealthy = await checkEngineHealth(address);
@@ -221,6 +236,21 @@ function createWindow() {
     });
 
     return mainWindow;
+}
+
+// コマンドライン引数から .txt ファイルパスを取得
+function getArgFilePath() {
+    // 開発環境とパッケージ後で process.argv の構造が変わるため考慮
+    const args = process.argv.slice(app.isPackaged ? 1 : 2);
+    for (const arg of args) {
+        // オプション引数(--等)を除く .txt ファイルパスを検索
+        if (!arg.startsWith('-') && arg.toLowerCase().endsWith('.txt')) {
+            if (fs.existsSync(arg)) {
+                return path.resolve(arg);
+            }
+        }
+    }
+    return null;
 }
 
 // Engineのヘルスチェック (起動完了待ち) 

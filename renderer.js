@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.22.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.24.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -97,27 +97,57 @@ document.addEventListener('DOMContentLoaded', async () => {
     const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
     applyFontSize(savedFontSize);
 
-    // ファイルパスの復元
-    const savedFilePath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
-    if (savedFilePath && filePathDisplay) {
-        filePathDisplay.textContent = savedFilePath;
-        updateFilePathMarquee();
-    }
+    // ★２：起動時の引数（テキストファイルパス）を取得依頼
+    const launchData = await window.api.getLaunchArgs();
+    if (launchData) {
+        // ★１ & ★３：起動時引数が存在する場合、localStorageからの復元をスキップして引数のデータで画面を更新
+        // ファイルパスの復元
+        if (filePathDisplay) {
+            filePathDisplay.textContent = launchData.filePath;
+            updateFilePathMarquee();
+        }
 
-    // テキストの復元
-    const savedText = localStorage.getItem(STORAGE_KEYS.TEXT);
-    if (savedText !== null && textInput) {
-        const normalizedSavedText = savedText.replace(/\r\n/g, '\n');
-        textInput.value = normalizedSavedText;
-        previousText = normalizedSavedText;
-        textBackup = normalizedSavedText;
-        btnSave.classList.remove('change-active');
-    }
+        // テキストの復元
+        if (textInput) {
+            const normalizedContent = launchData.content.replace(/\r\n/g, '\n');
+            textInput.value = normalizedContent;
+            previousText = normalizedContent;
+            textBackup = normalizedContent;
+            if (btnSave) btnSave.classList.remove('change-active');
+        }
 
-    // 再生位置の復元
-    const savedLineIndex = localStorage.getItem(STORAGE_KEYS.LINE_INDEX);
-    if (savedLineIndex !== null) {
-        currentLineIndex = parseInt(savedLineIndex, 10) || 0;
+        // 再生位置の初期化
+        currentLineIndex = 0;
+
+        // localStorage も起動引数の値に上書き更新
+        localStorage.setItem(STORAGE_KEYS.FILE_PATH, launchData.filePath);
+        localStorage.setItem(STORAGE_KEYS.TEXT, launchData.content);
+        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, '0');
+    } else {
+        // 起動時引数がない場合は従来通り localStorage から復元
+
+        // ファイルパスの復元
+        const savedFilePath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
+        if (savedFilePath && filePathDisplay) {
+            filePathDisplay.textContent = savedFilePath;
+            updateFilePathMarquee();
+        }
+
+        // テキストの復元
+        const savedText = localStorage.getItem(STORAGE_KEYS.TEXT);
+        if (savedText !== null && textInput) {
+            const normalizedSavedText = savedText.replace(/\r\n/g, '\n');
+            textInput.value = normalizedSavedText;
+            previousText = normalizedSavedText;
+            textBackup = normalizedSavedText;
+            if (btnSave) btnSave.classList.remove('change-active');
+        }
+
+        // 再生位置の復元
+        const savedLineIndex = localStorage.getItem(STORAGE_KEYS.LINE_INDEX);
+        if (savedLineIndex !== null) {
+            currentLineIndex = parseInt(savedLineIndex, 10) || 0;
+        }
     }
 
     // テキスト向きの復元
