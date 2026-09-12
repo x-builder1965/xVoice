@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.13.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.23.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -247,20 +247,45 @@ function checkEngineHealth(address = DEFAULT_AIVIS_HOST) {
     });
 }
 
+// プロセス存在確認関数 (PIDまたはイメージ名指定)
+function checkProcessRunning(target) {
+    return new Promise((resolve) => {
+        // targetが数値(PID)の場合は /FI "PID eq 9728"、文字列の場合は /FI "IMAGENAME eq run.exe"
+        const filter = typeof target === 'number' || !isNaN(target) 
+            ? `PID eq ${target}` 
+            : `IMAGENAME eq ${target}`;
+
+        exec(`tasklist /FI "${filter}" /NH`, (error, stdout) => {
+            if (error || !stdout) {
+                resolve(false);
+                return;
+            }
+            // 該当プロセスが見つからない場合は "情報: ..." (No tasks running) が返る
+            const isRunning = !stdout.includes('情報:') && !stdout.includes('No tasks') && stdout.trim().length > 0;
+            resolve(isRunning);
+        });
+    });
+}
+
 // Engine起動状態確認＆起動処理
 async function startAivisEngine(address = DEFAULT_AIVIS_HOST) {
-    const isRunning = await checkEngineHealth(address);
-    if (isRunning) {
+    // 1. 指定のPID(9728)またはイメージ名でプロセスが生存しているか確認
+    const isPidRunning = await checkProcessRunning(9728);
+    
+    // 2. HTTPヘルスチェック
+    const isHttpHealthy = await checkEngineHealth(address);
+
+    // プロセスが存在し、かつHTTP応答もある場合
+    if (isPidRunning && isHttpHealthy) {
         if (mainWindow) {
-            mainWindow.webContents.send('engine-progress-update', { current: 60, total: 60, isRunning: true });
-            // レンダラー側のイベント受信用インターフェース互換
-            mainWindow.webContents.send('engine-progress', { current: 60, total: 60, isRunning: true });
+            const progressData = { current: 60, total: 60, isRunning: true };
+            mainWindow.webContents.send('engine-progress-update', progressData);
+            mainWindow.webContents.send('engine-progress', progressData);
         }
-        // 既に外部等で起動済みの場合は自前起動フラグを立てない
         return true;
     }
 
-    // run.exe 存在確認
+    // --- (以下、既存の run.exe 起動処理) ---
     const fullExePath = path.join(ENGINE_PATH, ENGINE_EXE);
     if (!fs.existsSync(fullExePath)) {
         console.error('ローカル Engine 実行ファイルが見つかりません:', fullExePath);
@@ -268,20 +293,19 @@ async function startAivisEngine(address = DEFAULT_AIVIS_HOST) {
     }
 
     // run.exe 起動
-    spawn(ENGINE_EXE, ['--host', '0.0.0.0', '--port', '10101', '--load_all_models'], {
+    const child = spawn(ENGINE_EXE, ['--host', '0.0.0.0', '--port', '10101', '--load_all_models'], {
         cwd: ENGINE_PATH,
         detached: true,
         stdio: 'ignore'
-    }).unref();
+    });
+    child.unref();
 
-    // 本アプリで起動したためフラグを有効化
     isEngineSpawnedByApp = true;
 
     const maxTries = 60;
     for (let i = 1; i <= maxTries; i++) {
         await new Promise(r => setTimeout(r, 2000));
 
-        // 進捗状況を画面に送出（両方の命名イベントに対応）
         if (mainWindow && !mainWindow.isDestroyed()) {
             const progressData = { current: i, total: maxTries, isRunning: false };
             mainWindow.webContents.send('engine-progress-update', progressData);
