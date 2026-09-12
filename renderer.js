@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.20.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.21.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         'ctrl+c': { control: 'btn-file-clear',  editing: false },
         'ctrl+n': { control: 'btn-connect',     editing: true },
         'ctrl+r': { control: 'btn-ruby',        editing: true },
+        'ctrl+u': { control: 'btn-unity',       editing: true },
         'ctrl+s': { control: 'btn-save',        editing: true },
         'ctrl+p': { control: 'btn-speak',       editing: true },
         'ctrl+g': { control: 'btn-generate',    editing: true },
@@ -43,6 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let fontSizeSelect = null;
     let btnFileClear = null;
     let btnRuby = null;
+    let btnUnity = null;
     let btnSave = null;
     let btnSpeak = null;
     let btnGenerate = null;
@@ -271,32 +273,73 @@ document.addEventListener('DOMContentLoaded', async () => {
         const start = textInput.selectionStart;
         const end = textInput.selectionEnd;
     
-        // 現在のカーソル位置/選択範囲が含まれている「｛...｝」を探す
-        const lastOpen = text.lastIndexOf('｛', start);
-        const nextClose = text.indexOf('｝', start);
+        // 1. 全角・半角に対応したルビ構造（ { / ｛ 本体の文字列 | / ｜ 読みの文字列 } / ｝ ）を正規表現で探す
+        const rubyRegex = /[｛{]([^｜|｛{}]+)[｜|]([^｝}]+)[｝}]/g;
+        let match;
+        let targetMatch = null;
     
-        // 1. カーソルが「｛」と「｝」の間にあり、その中に「｜」が含まれているか判定（読み解除の判定）
-        if (lastOpen !== -1 && nextClose !== -1 && lastOpen < nextClose) {
-            // 「｛」から「｝」までの部分文字列を取得
-            const rubyBlock = text.substring(lastOpen, nextClose + 1);
+        // カーソル位置が含まれるルビブロックを特定
+        while ((match = rubyRegex.exec(text)) !== null) {
+            const matchStart = match.index;
+            const matchEnd = matchStart + match[0].length;
     
-            // 「｛本体テキスト｜読み文字｝」の形式かチェック（「｜」が存在するか）
-            const pipeIndex = rubyBlock.indexOf('｜');
-            if (pipeIndex !== -1) {
-                // 読み構造から「本体テキスト」部分のみ抽出（「｛」の後ろから「｜」の前まで）
-                const bodyText = rubyBlock.substring(1, pipeIndex);
-    
-                // 読み構文全体（｛...｜...｝）を選択状態にする
-                textInput.focus();
-                textInput.setSelectionRange(lastOpen, nextClose + 1);
-    
-                // 読み構文を本体テキストで置換（読み削除）
-                document.execCommand('insertText', false, bodyText);
-                return;
+            if (start >= matchStart && start <= matchEnd) {
+                targetMatch = {
+                    full: match[0],
+                    bodyText: match[1], // 本体テキスト
+                    rubyText: match[2], // 読み
+                    start: matchStart,
+                    end: matchEnd
+                };
+                break;
             }
         }
     
-        // 2. 読み内にいない場合は、選択領域に読み構文を付与
+        // 読み解除処理（カーソルがルビ記法内に存在する場合）
+        if (targetMatch) {
+            const rubyBlock = targetMatch.full;
+            const bodyText = targetMatch.bodyText;
+    
+            const scrollTop = textInput.scrollTop;
+            const scrollLeft = textInput.scrollLeft;
+    
+            // 全体の中で対象のルビブロックが何件存在するかカウント
+            const replaceCount = text.split(rubyBlock).length - 1;
+    
+            // 1つのルビ解除によって短くなる文字数
+            const diffPerBlock = rubyBlock.length - bodyText.length;
+    
+            // 元のカーソル位置（start）より「前」にある対象ルビブロックの個数をカウント
+            const textBeforeCursor = text.substring(0, start);
+            const matchesBefore = textBeforeCursor.split(rubyBlock).length - 1;
+    
+            // 前方で置換された文字数の合計分、カーソル位置を減算補正
+            let newCursorPos = start - (matchesBefore * diffPerBlock);
+    
+            // カーソルが操作中ルビブロックの内部にあった場合、置換後の範囲内に収まるようクランプ
+            const firstMatchBeforePos = targetMatch.start - ((matchesBefore - 1) * diffPerBlock);
+            const minPos = firstMatchBeforePos;
+            const maxPos = firstMatchBeforePos + bodyText.length;
+            newCursorPos = Math.max(minPos, Math.min(newCursorPos, maxPos));
+    
+            // テキスト全体から同一のルビ構造（rubyBlock）をすべて本体テキストに置換
+            textInput.value = text.replaceAll(rubyBlock, bodyText);
+            textInput.dispatchEvent(new Event('input', { bubbles: true }));
+            textInput.focus();
+    
+            // 補正した位置にカーソルを設定
+            textInput.setSelectionRange(newCursorPos, newCursorPos);
+    
+            // スクロール位置を復元
+            textInput.scrollTop = scrollTop;
+            textInput.scrollLeft = scrollLeft;
+    
+            // トースト通知を表示
+            showToast(`${replaceCount}件の読み解除が完了しました`, 'info');
+            return;
+        }
+    
+        // 2. 読み内にいない場合は、選択領域に読み構文（全角）を付与
         const selectedText = text.substring(start, end);
         const rubyFormatted = `｛${selectedText}｜｝`;
     
@@ -304,9 +347,77 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.execCommand('insertText', false, rubyFormatted);
     
         // 「｜」と「｝」の間の位置を計算してカーソルを移動
-        // （開始位置 + 「｛」の1文字 + 選択文字列の長さ + 「｜」の1文字）
         const targetCursorPos = start + 1 + selectedText.length + 1;
         textInput.setSelectionRange(targetCursorPos, targetCursorPos);
+    });
+    
+    // 読み統一のクリックイベントリスナー
+    btnUnity?.addEventListener('click', (e) => {
+        const text = textInput.value;
+        const cursorPos = textInput.selectionStart;
+    
+        // 全角・半角に対応したルビ構造（ ｛ / { 対象文字 ｜ / | 読み ｝ / } ）を正規表現で検索
+        const rubyRegex = /[｛{]([^｜|｛{}]+)[｜|]([^｝}]+)[｝}]/g;
+        let match;
+        let targetMatch = null;
+    
+        // カーソル位置が含まれるルビ記述を特定
+        while ((match = rubyRegex.exec(text)) !== null) {
+            const start = match.index;
+            const end = start + match[0].length;
+    
+            if (cursorPos >= start && cursorPos <= end) {
+                targetMatch = {
+                    full: match[0],       // ｛対象文字｜読み｝ や {対象文字|読み}
+                    kanji: match[1],      // 対象文字
+                    ruby: match[2],       // 読み
+                    start: start,
+                    end: end
+                };
+                break;
+            }
+        }
+    
+        // 1. カーソル位置がルビ編集内でない場合
+        if (!targetMatch) {
+            showToast('読み編集されていません', 'warning');
+            return;
+        }
+    
+        const targetKanji = targetMatch.kanji;
+        const rubyString = targetMatch.full;
+    
+        // 対象文字を検索するための正規表現（エスケープ処理を実施）
+        const escapedKanji = targetKanji.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+        // すでにルビ化されている部分を除外する正規表現（カッコの全角・半角両方に対応）
+        // 記述パターン： ｛...｜対象文字...｝ や {...|対象文字...} の内部を除外
+        const searchRegex = new RegExp(`(?<![｛{][^｝}]*)${escapedKanji}(?![^｛{]*[｝}])`, 'g');
+    
+        let replaceCount = 0;
+    
+        // テキスト全体の置換処理
+        const newText = text.replace(searchRegex, (m, offset) => {
+            // カーソル位置にあった元の対象文字はカウントから除外
+            if (offset >= targetMatch.start && offset < targetMatch.end) {
+                return m;
+            }
+            replaceCount++;
+            return rubyString;
+        });
+    
+        // 2. 他に対象文字が見つからなかった場合
+        if (replaceCount === 0) {
+            showToast('他に検索されていません', 'warning');
+            return;
+        }
+    
+        // テキストの更新とトースター表示
+        textInput.value = newText;
+        textInput.dispatchEvent(new Event('input', { bubbles: true }));
+    
+        // 3. 置き換え完了
+        showToast(`他${replaceCount}件の読み編集が完了しました`, 'info');
     });
 
     // 保存ボタンクリックイベント
@@ -433,6 +544,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         fontSizeSelect = document.getElementById('font-size-select');
         btnFileClear = document.getElementById('btn-file-clear');
         btnRuby = document.getElementById('btn-ruby');
+        btnUnity = document.getElementById('btn-unity');
         btnSave = document.getElementById('btn-save');
         btnSpeak = document.getElementById('btn-speak');
         btnGenerate = document.getElementById('btn-generate');
@@ -1152,7 +1264,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // showToast('処理が完了しました', 'info');
     // showToast('接続を確認してください', 'warning');
     // showToast('エラーが発生しました', 'error');
-    function showToast(message, type = 'info') {
+    function showToast(message, type = 'info', disolayTime = 6000) {
         if (!toastMessage) return;
 
         if (toastTimer) {
@@ -1182,7 +1294,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         toastTimer = setTimeout(() => {
             toastMessage.classList.add('hidden');
-        }, 3000);
+        }, disolayTime);
     }
 
     // キャッシュおよびバッファ表示をクリアする
