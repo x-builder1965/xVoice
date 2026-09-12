@@ -273,8 +273,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const start = textInput.selectionStart;
         const end = textInput.selectionEnd;
     
-        // 1. 全角・半角に対応したルビ構造（ { / ｛ 本体の文字列 | / ｜ 読みの文字列 } / ｝ ）を正規表現で探す
-        const rubyRegex = /[｛{]([^｜|｛{}]+)[｜|]([^｝}]+)[｝}]/g;
+        // 1. 全角・半角に対応したルビ構造を探す（本体テキスト・読み共に0文字以上を許容）
+        const rubyRegex = /[｛{]([^｜|｛{}]*)[｜|]([^｝}]*)[｝}]/g;
         let match;
         let targetMatch = null;
     
@@ -286,8 +286,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (start >= matchStart && start <= matchEnd) {
                 targetMatch = {
                     full: match[0],
-                    bodyText: match[1], // 本体テキスト
-                    rubyText: match[2], // 読み
+                    bodyText: match[1], // 本体テキスト（空文字の場合もあり）
+                    rubyText: match[2], // 読み（空文字の場合もあり）
                     start: matchStart,
                     end: matchEnd
                 };
@@ -309,25 +309,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 1つのルビ解除によって短くなる文字数
             const diffPerBlock = rubyBlock.length - bodyText.length;
     
-            // 元のカーソル位置（start）より「前」にある対象ルビブロックの個数をカウント
-            const textBeforeCursor = text.substring(0, start);
-            const matchesBefore = textBeforeCursor.split(rubyBlock).length - 1;
+            // 操作対象のルビブロックより「前」にある同一ルビブロックの個数をカウント
+            const textBeforeTarget = text.substring(0, targetMatch.start);
+            const matchesBefore = textBeforeTarget.split(rubyBlock).length - 1;
     
-            // 前方で置換された文字数の合計分、カーソル位置を減算補正
-            let newCursorPos = start - (matchesBefore * diffPerBlock);
-    
-            // カーソルが操作中ルビブロックの内部にあった場合、置換後の範囲内に収まるようクランプ
-            const firstMatchBeforePos = targetMatch.start - ((matchesBefore - 1) * diffPerBlock);
-            const minPos = firstMatchBeforePos;
-            const maxPos = firstMatchBeforePos + bodyText.length;
-            newCursorPos = Math.max(minPos, Math.min(newCursorPos, maxPos));
+            // 置換後、対象テキスト（bodyText）の先頭となるカーソル位置を算出
+            const newCursorPos = targetMatch.start - (matchesBefore * diffPerBlock);
     
             // テキスト全体から同一のルビ構造（rubyBlock）をすべて本体テキストに置換
             textInput.value = text.replaceAll(rubyBlock, bodyText);
             textInput.dispatchEvent(new Event('input', { bubbles: true }));
             textInput.focus();
     
-            // 補正した位置にカーソルを設定
+            // 対象文字の先頭にカーソルを設定
             textInput.setSelectionRange(newCursorPos, newCursorPos);
     
             // スクロール位置を復元
@@ -335,7 +329,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             textInput.scrollLeft = scrollLeft;
     
             // トースト通知を表示
-            showToast(`${replaceCount}件の読み解除が完了しました`, 'info');
+            showToast(`${replaceCount}件の読みを解除しました`, 'info');
             return;
         }
     
@@ -357,7 +351,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const cursorPos = textInput.selectionStart;
     
         // 全角・半角に対応したルビ構造（ ｛ / { 対象文字 ｜ / | 読み ｝ / } ）を正規表現で検索
-        const rubyRegex = /[｛{]([^｜|｛{}]+)[｜|]([^｝}]+)[｝}]/g;
+        const rubyRegex = /[｛{]([^｜|｛{}]+)[｜|]([^｝}]*)[｝}]/g;
         let match;
         let targetMatch = null;
     
@@ -368,7 +362,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
             if (cursorPos >= start && cursorPos <= end) {
                 targetMatch = {
-                    full: match[0],       // ｛対象文字｜読み｝ や {対象文字|読み}
+                    full: match[0],       // ｛対象文字｜読み｝
                     kanji: match[1],      // 対象文字
                     ruby: match[2],       // 読み
                     start: start,
@@ -387,18 +381,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         const targetKanji = targetMatch.kanji;
         const rubyString = targetMatch.full;
     
-        // 対象文字を検索するための正規表現（エスケープ処理を実施）
+        // 対象文字を正規表現用にエスケープ処理
         const escapedKanji = targetKanji.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
-        // すでにルビ化されている部分を除外する正規表現（カッコの全角・半角両方に対応）
-        // 記述パターン： ｛...｜対象文字...｝ や {...|対象文字...} の内部を除外
-        const searchRegex = new RegExp(`(?<![｛{][^｝}]*)${escapedKanji}(?![^｛{]*[｝}])`, 'g');
+        // ① 既に存在する異なるルビ記述（例: ｛漢字｜古い読み｝ や {漢字|古い読み}）にマッチする正規表現
+        const existingRubyRegex = new RegExp(`[｛{]${escapedKanji}[｜|][^｝}]*[｝}]`, 'g');
+    
+        // ② ルビ構文の外にある単体の対象文字にマッチする正規表現
+        const plainTextRegex = new RegExp(`(?<![｛{][^｝}]*)${escapedKanji}(?![^｛{]*[｝}])`, 'g');
     
         let replaceCount = 0;
     
-        // テキスト全体の置換処理
-        const newText = text.replace(searchRegex, (m, offset) => {
-            // カーソル位置にあった元の対象文字はカウントから除外
+        // 処理1: 既存の同一対象文字を持つルビブロックを置換（自分自身以外）
+        let intermediateText = text.replace(existingRubyRegex, (m, offset) => {
+            if (offset >= targetMatch.start && offset < targetMatch.end) {
+                return m; // カーソル位置のルビ自身はそのまま保持
+            }
+            if (m !== rubyString) {
+                replaceCount++;
+                return rubyString; // 読みが異なる既存ルビを更新
+            }
+            return m; // 既に同じルビ表現になっているものは維持
+        });
+    
+        // 処理2: 未ルビ化の単体文字をルビブロックへ置換
+        const newText = intermediateText.replace(plainTextRegex, (m, offset) => {
+            // カーソル位置のルビブロック内部にある文字はスキップ
             if (offset >= targetMatch.start && offset < targetMatch.end) {
                 return m;
             }
@@ -406,18 +414,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             return rubyString;
         });
     
-        // 2. 他に対象文字が見つからなかった場合
+        // 2. 他に対象文字（置換対象）が見つからなかった場合
         if (replaceCount === 0) {
-            showToast('他に検索されていません', 'warning');
+            showToast('統一対象の文字は存在しません', 'warning');
             return;
         }
     
-        // テキストの更新とトースター表示
+        // テキストの更新とイベント発火
         textInput.value = newText;
         textInput.dispatchEvent(new Event('input', { bubbles: true }));
     
         // 3. 置き換え完了
-        showToast(`他${replaceCount}件の読み編集が完了しました`, 'info');
+        showToast(`${replaceCount}件の読み統一が完了しました`, 'info');
     });
 
     // 保存ボタンクリックイベント
