@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.21.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.22.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -71,6 +71,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     let isGenerateCanceled = false;
     let isEngineReady = false;    // エンジン接続状態フラグ
     let toastTimer = null;
+    let toastRemainingTime = 0;
+    let toastStartTime = 0;
     let isPrefetching = false;    // ループ重複実行防止フラグ
 
     // 🔲初期設定🔲
@@ -461,6 +463,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             generateFullTextMp3();
         }
     });
+
+        // 1. クリックで即座に非表示
+        toastMessage?.addEventListener('click', hideToast);
+    
+        // 2. マウスオーバーでタイマー一時停止
+        toastMessage?.addEventListener('mouseenter', () => {
+            if (toastTimer) {
+                clearTimeout(toastTimer);
+                toastTimer = null;
+                // 経過時間を引いて残りの表示時間を計算
+                const elapsedTime = Date.now() - toastStartTime;
+                toastRemainingTime = Math.max(0, toastRemainingTime - elapsedTime);
+            }
+        });
+    
+        // 3. マウスが離れたら残り時間でタイマー再開
+        toastMessage?.addEventListener('mouseleave', () => {
+            if (!toastMessage.classList.contains('hidden') && toastRemainingTime > 0) {
+                toastStartTime = Date.now();
+                toastTimer = setTimeout(() => {
+                    hideToast();
+                }, toastRemainingTime);
+            }
+        });
 
     // キーボードイベントの登録
     document.addEventListener('keydown', (e) => {
@@ -1268,41 +1294,50 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // トーストを非表示にする共通関数
+    function hideToast() {
+        if (!toastMessage) return;
+        if (toastTimer) {
+            clearTimeout(toastTimer);
+            toastTimer = null;
+        }
+        toastMessage.classList.add('hidden');
+    }
+
     // 呼び出し例:
     // showToast('処理が完了しました', 'info');
     // showToast('接続を確認してください', 'warning');
     // showToast('エラーが発生しました', 'error');
-    function showToast(message, type = 'info', disolayTime = 6000) {
+    function showToast(message, type = 'info', displayTime = 6000) {
         if (!toastMessage) return;
-
+    
+        // 既存タイマーのクリア
         if (toastTimer) {
             clearTimeout(toastTimer);
+            toastTimer = null;
         }
-
-        // タイプ別アイコンの定義
+    
         const icons = {
             info: 'ℹ️',
             warning: '⚠️',
             error: '🚫'
         };
-
-        // 該当するアイコン（未指定・不正な場合は info）を取得
         const icon = icons[type] || icons.info;
-
-        // 既存のタイプ別クラスを一旦削除
+    
         toastMessage.classList.remove('toast-info', 'toast-warning', 'toast-error');
-        
-        // 指定されたタイプ用のクラスを追加
         toastMessage.classList.add(`toast-${type}`);
-
-        // アイコン付きでテキストを設定
         toastMessage.textContent = `${icon} ${message}`;
         toastMessage.classList.remove('hidden');
-    if (statusDiv) statusDiv.textContent = `${icon} ${message}`;
-
+    
+        if (statusDiv) statusDiv.textContent = `${icon} ${message}`;
+    
+        // ★ 修正ポイント: 新しい表示に合わせて残時間と開始時間をリセット
+        toastRemainingTime = displayTime;
+        toastStartTime = Date.now();
+    
         toastTimer = setTimeout(() => {
-            toastMessage.classList.add('hidden');
-        }, disolayTime);
+            hideToast();
+        }, toastRemainingTime);
     }
 
     // キャッシュおよびバッファ表示をクリアする
