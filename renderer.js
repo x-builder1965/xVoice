@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.29.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.30.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -886,10 +886,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
         localStorage.setItem(STORAGE_KEYS.TEXT_BACKUP, loadedText);
 
-const testBackup = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP);
-
         if (btnGenerate) btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
 
+        clearAudioCache();
         moveCursorToLineStart(0);
     }
 
@@ -1025,8 +1024,8 @@ const testBackup = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP);
         isFirstPlay = false;
     
         if (currentLineIndex >= lines.length) {
-            currentLineIndex = 0;
-            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+            currentLineIndex = lines.length;
+            localStorage.setItem(STORAGE_KEYS.LINE_INDEX, lines.length);
         }
     
         updateButtonStates(true);
