@@ -114,6 +114,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const normalizedContent = launchData.content.replace(/\r\n/g, '\n');
             textInput.value = normalizedContent;
             previousText = normalizedContent;
+            textBackup = normalizedContent;
+            if (btnSave) btnSave.classList.remove('change-active');
         }
 
         // 再生位置の初期化
@@ -146,13 +148,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (savedLineIndex !== null) {
             currentLineIndex = parseInt(savedLineIndex, 10) || 0;
         }
-    }
 
-    // テキストバックアップの復元
-    const savedTextBackup = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP) || '';
-    textBackup = savedTextBackup;
-    if (textBackup !== textInput.value) {
-        if (btnSave) btnSave.classList.add('change-active');
+        // テキストバックアップの復元
+        const savedTextBackup = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP) || '';
+        textBackup = savedTextBackup;
+        if (textBackup !== textInput.value) {
+            if (btnSave) btnSave.classList.add('change-active');
+        }
     }
 
     // テキスト向きの復元
