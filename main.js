@@ -29,185 +29,238 @@ let isEngineSpawnedByApp = false;
 ffmpeg.setFfmpegPath(ffmpegStatic.replace('app.asar', 'app.asar.unpacked'));
 
 // 🔲app イベント🔲
-// アプリ初期化 ＆ 終了処理
-app.whenReady().then(createWindow);
-
+// アプリ初期処理
+registerAppWhenReady();
 // アプリ終了処理
-app.on('will-quit', async (event) => {
-    // 本アプリによって起動された場合のみエンジンを終了
-    if (isEngineSpawnedByApp) {
-        event.preventDefault();
-        await stopAivisEngine();
-        process.exit(0);
-    }
-});
-
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
-});
+registerAppOnWillQuit();
+// アプリ終了後処理
+registerAppOnWindowAllClosed();
 
 // 🔲IPC ハンドラー登録🔲
-// 起動時引数取得ハンドラー（★２）
-ipcMain.handle('get-launch-args', async () => {
-    const filePath = getArgFilePath();
-    if (filePath) {
-        const fileData = readTextFile(filePath);
-        if (fileData) {
-            return {
-                filePath: fileData.path,
-                content: fileData.content
-            };
-        }
-    }
-    return null;
-});
+// 起動時引数取得ハンドラー
+registerIpcMainGetLaunchArgs();
+// アプリ起動時の初期化チェック（動的アドレス指定対応）ハンドラー
+registerIpcMainInitEngine();
+// 手動接続・自起動ハンドラー
+registerIpcMainConnectEngine();
+// 手動切断ハンドラー
+registerIpcMainDisconnectEngine();
+// Engine再起動処理ハンドラー
+registerIpcMainRestartEngine();
+// 音声保存処理ハンドラー
+registerIpcMainGenerateAudio();
+// ファイル選択ダイアログを表示するIPCハンドラー
+registerIpcMainSelectFile();
+// 指定されたパスのファイルを直接読み込むIPCハンドラー
+registerIpcMainReadFileByPath();
+// テキスト保存用 IPC Main 処理ハンドラー
+registerIpcMainSaveTextFile();
 
-// アプリ起動時の初期化チェック（動的アドレス指定対応）
-ipcMain.handle('init-engine', async (event, address = DEFAULT_AIVIS_HOST) => {
-    const isHealthy = await checkEngineHealth(address);
-    if (isHealthy) {
-        return { success: true, isSelfConnected: false };
-    }
-    return { success: false, isSelfConnected: false };
-});
+// 🔲app イベント🔲
+// アプリ初期処理
+function registerAppWhenReady() {
+    app.whenReady().then(createWindow);
+}
+
+// アプリ終了処理
+function registerAppOnWillQuit() {
+    app.on('will-quit', async (event) => {
+        // 本アプリによって起動された場合のみエンジンを終了
+        if (isEngineSpawnedByApp) {
+            event.preventDefault();
+            await stopAivisEngine();
+            process.exit(0);
+        }
+    });
+}
+
+// アプリ終了後処理
+function registerAppOnWindowAllClosed() {
+    app.on('window-all-closed', () => {
+        if (process.platform !== 'darwin') app.quit();
+    });
+}
+
+// 🔲IPC ハンドラー登録🔲
+// 起動時引数取得ハンドラー
+function registerIpcMainGetLaunchArgs() {
+    ipcMain.handle('get-launch-args', async () => {
+        const filePath = getArgFilePath();
+        if (filePath) {
+            const fileData = readTextFile(filePath);
+            if (fileData) {
+                return {
+                    filePath: fileData.path,
+                    content: fileData.content
+                };
+            }
+        }
+        return null;
+    });
+}
+
+// アプリ起動時の初期化チェック（動的アドレス指定対応）ハンドラー
+function registerIpcMainInitEngine() {
+    ipcMain.handle('init-engine', async (event, address = DEFAULT_AIVIS_HOST) => {
+        const isHealthy = await checkEngineHealth(address);
+        if (isHealthy) {
+            return { success: true, isSelfConnected: false };
+        }
+        return { success: false, isSelfConnected: false };
+    });
+}
 
 // 手動接続・自起動ハンドラー
-ipcMain.handle('connect-engine', async (event, address = DEFAULT_AIVIS_HOST) => {
-    // 1. 指定されたアドレスのヘルスチェック
-    let isHealthy = await checkEngineHealth(address);
-    if (isHealthy) {
-        return { success: true, isSelfConnected: false };
-    }
-
-    // 2. ローカル環境（localhost / 127.0.0.1）の場合は自起動を試みる
-    if (address.includes('127.0.0.1') || address.includes('localhost')) {
-        const launched = await startAivisEngine(address);
-        if (launched) {
-            return { success: true, isSelfConnected: true };
+function registerIpcMainConnectEngine() {
+    ipcMain.handle('connect-engine', async (event, address = DEFAULT_AIVIS_HOST) => {
+        // 1. 指定されたアドレスのヘルスチェック
+        let isHealthy = await checkEngineHealth(address);
+        if (isHealthy) {
+            return { success: true, isSelfConnected: false };
         }
-    }
 
-    return { success: false, error: 'AivisSpeech Engine サーバーに接続できませんでした。' };
-});
+        // 2. ローカル環境（localhost / 127.0.0.1）の場合は自起動を試みる
+        if (address.includes('127.0.0.1') || address.includes('localhost')) {
+            const launched = await startAivisEngine(address);
+            if (launched) {
+                return { success: true, isSelfConnected: true };
+            }
+        }
+
+        return { success: false, error: 'AivisSpeech Engine サーバーに接続できませんでした。' };
+    });
+}
 
 // 手動切断ハンドラー
-ipcMain.handle('disconnect-engine', async () => {
-    if (isEngineSpawnedByApp) {
-        await stopAivisEngine();
-    }
-    return { success: true };
-});
-
-// Engine再起動処理
-ipcMain.handle('restart-engine', async (event, address = DEFAULT_AIVIS_HOST) => {
-    // 手動再起動時は一旦強制停止してから再起動（自前管理化する）
-    await stopAivisEngine();
-    await new Promise(r => setTimeout(r, 1000));
-    const success = await startAivisEngine(address);
-    return { success };
-});
-
-// 音声保存処理
-ipcMain.handle('generate-audio', async (event, arrayBufferArray, defaultFilename = 'xVoice生成.mp3') => {
-    const { filePath } = await dialog.showSaveDialog({
-        title: '全文MP3ファイルを保存',
-        defaultPath: defaultFilename || 'xVoice生成.mp3',
-        filters: [{ name: 'Audio', extensions: ['mp3'] }]
-    });
-
-    if (!filePath) return false;
-
-    const tempWavPath = path.join(os.tmpdir(), `combined_${Date.now()}.wav`);
-
-    try {
-        const pcmBuffers = [];
-        arrayBufferArray.forEach((ab, index) => {
-            const buf = Buffer.from(ab);
-            if (index === 0) {
-                pcmBuffers.push(buf);
-            } else {
-                pcmBuffers.push(buf.subarray(44));
-            }
-        });
-
-        const combinedBuffer = Buffer.concat(pcmBuffers);
-        const totalDataSize = combinedBuffer.length - 44;
-        combinedBuffer.writeUInt32LE(combinedBuffer.length - 8, 4);
-        combinedBuffer.writeUInt32LE(totalDataSize, 40);
-
-        fs.writeFileSync(tempWavPath, combinedBuffer);
-
-        await new Promise((resolve, reject) => {
-            ffmpeg(tempWavPath)
-                .toFormat('mp3')
-                .audioBitrate(192)
-                .on('end', resolve)
-                .on('error', reject)
-                .save(filePath);
-        });
-
-        return true;
-    } catch (err) {
-        console.error('MP3 Generate Error:', err);
-        return false;
-    } finally {
-        if (fs.existsSync(tempWavPath)) {
-            fs.unlinkSync(tempWavPath);
+function registerIpcMainDisconnectEngine() {
+    ipcMain.handle('disconnect-engine', async () => {
+        if (isEngineSpawnedByApp) {
+            await stopAivisEngine();
         }
-    }
-});
+        return { success: true };
+    });
+}
+
+// Engine再起動処理ハンドラー
+function registerIpcMainRestartEngine() {
+    ipcMain.handle('restart-engine', async (event, address = DEFAULT_AIVIS_HOST) => {
+        // 手動再起動時は一旦強制停止してから再起動（自前管理化する）
+        await stopAivisEngine();
+        await new Promise(r => setTimeout(r, 1000));
+        const success = await startAivisEngine(address);
+        return { success };
+    });
+}
+
+// 音声保存処理ハンドラー
+function registerIpcMainGenerateAudio() {
+    ipcMain.handle('generate-audio', async (event, arrayBufferArray, defaultFilename = 'xVoice生成.mp3') => {
+        const { filePath } = await dialog.showSaveDialog({
+            title: '全文MP3ファイルを保存',
+            defaultPath: defaultFilename || 'xVoice生成.mp3',
+            filters: [{ name: 'Audio', extensions: ['mp3'] }]
+        });
+
+        if (!filePath) return false;
+
+        const tempWavPath = path.join(os.tmpdir(), `combined_${Date.now()}.wav`);
+
+        try {
+            const pcmBuffers = [];
+            arrayBufferArray.forEach((ab, index) => {
+                const buf = Buffer.from(ab);
+                if (index === 0) {
+                    pcmBuffers.push(buf);
+                } else {
+                    pcmBuffers.push(buf.subarray(44));
+                }
+            });
+
+            const combinedBuffer = Buffer.concat(pcmBuffers);
+            const totalDataSize = combinedBuffer.length - 44;
+            combinedBuffer.writeUInt32LE(combinedBuffer.length - 8, 4);
+            combinedBuffer.writeUInt32LE(totalDataSize, 40);
+
+            fs.writeFileSync(tempWavPath, combinedBuffer);
+
+            await new Promise((resolve, reject) => {
+                ffmpeg(tempWavPath)
+                    .toFormat('mp3')
+                    .audioBitrate(192)
+                    .on('end', resolve)
+                    .on('error', reject)
+                    .save(filePath);
+            });
+
+            return true;
+        } catch (err) {
+            console.error('MP3 Generate Error:', err);
+            return false;
+        } finally {
+            if (fs.existsSync(tempWavPath)) {
+                fs.unlinkSync(tempWavPath);
+            }
+        }
+    });
+}
 
 // ファイル選択ダイアログを表示するIPCハンドラー
-ipcMain.handle('select-file', async () => {
-    const result = await dialog.showOpenDialog({
-        properties: ['openFile'],
-        filters: [
-            { name: 'テキストファイル', extensions: ['txt'] },
-            { name: 'すべてのファイル', extensions: ['*'] }
-        ]
+function registerIpcMainSelectFile() {
+    ipcMain.handle('select-file', async () => {
+        const result = await dialog.showOpenDialog({
+            properties: ['openFile'],
+            filters: [
+                { name: 'テキストファイル', extensions: ['txt'] },
+                { name: 'すべてのファイル', extensions: ['*'] }
+            ]
+        });
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return null;
+        }
+
+        return readTextFile(result.filePaths[0]);
     });
-
-    if (result.canceled || result.filePaths.length === 0) {
-        return null;
-    }
-
-    return readTextFile(result.filePaths[0]);
-});
+}
 
 // 指定されたパスのファイルを直接読み込むIPCハンドラー
-ipcMain.handle('read-file-by-path', async (event, filePath) => {
-    return readTextFile(filePath);
-});
-
-// テキスト保存用 IPC Main 処理
-ipcMain.handle('save-text-file', async (event, textContent, defaultPath) => {
-    const win = BrowserWindow.getFocusedWindow();
-
-    // 指定パスが存在する場合はそれを使用し、無ければデフォルトのファイル名を設定
-    const targetPath = (defaultPath && defaultPath.trim() !== '') 
-        ? defaultPath 
-        : 'xVoice_text.txt';
-
-    const { canceled, filePath } = await dialog.showSaveDialog(win, {
-        title: 'ファイルを保存',
-        defaultPath: targetPath,
-        filters: [
-            { name: 'テキストファイル', extensions: ['txt'] },
-            { name: 'すべてのファイル', extensions: ['*'] }
-        ]
+function registerIpcMainReadFileByPath() {
+    ipcMain.handle('read-file-by-path', async (event, filePath) => {
+        return readTextFile(filePath);
     });
+}
 
-    if (canceled || !filePath) {
-        return { success: false };
-    }
+// テキスト保存用 IPC Main 処理ハンドラー
+function registerIpcMainSaveTextFile() {
+    ipcMain.handle('save-text-file', async (event, textContent, defaultPath) => {
+        const win = BrowserWindow.getFocusedWindow();
 
-    try {
-        fs.writeFileSync(filePath, textContent, 'utf-8');
-        return { success: true, filePath };
-    } catch (error) {
-        return { success: false, error: error.message };
-    }
-});
+        // 指定パスが存在する場合はそれを使用し、無ければデフォルトのファイル名を設定
+        const targetPath = (defaultPath && defaultPath.trim() !== '') 
+            ? defaultPath 
+            : 'xVoice_text.txt';
+
+        const { canceled, filePath } = await dialog.showSaveDialog(win, {
+            title: 'ファイルを保存',
+            defaultPath: targetPath,
+            filters: [
+                { name: 'テキストファイル', extensions: ['txt'] },
+                { name: 'すべてのファイル', extensions: ['*'] }
+            ]
+        });
+
+        if (canceled || !filePath) {
+            return { success: false };
+        }
+
+        try {
+            fs.writeFileSync(filePath, textContent, 'utf-8');
+            return { success: true, filePath };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+}
 
 // 🔲共通ヘルパー関数🔲
 // window生成
