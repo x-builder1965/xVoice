@@ -1,7 +1,7 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.30.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.31.0';
  --------------------------------------------------------------------- -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -14,76 +14,97 @@
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <div class="title-group">
-                <h1 class="app-title">
-                    <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
-                    xVoice -テキスト音声読み上げ- 
-                </h1>
-                <div class="ver-title">Ver1.30.0</div>
+        <div class="main-container">
+            <div class="header">
+                <div class="title-group">
+                    <h1 class="app-title">
+                        <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
+                        xVoice -テキスト音声読み上げ- 
+                    </h1>
+                    <div class="ver-title">Ver1.00.0</div>
+                </div>
+                <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替" title="テーマ切替 (Ctrl+t)">☀️</button>
             </div>
-            <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替" title="テーマ切替 (Ctrl+t)">☀️</button>
-        </div>
 
-        <!-- トースト通知用オーバーレイ -->
-        <div id="toast-message" class="toast hidden"></div>
-        
-        <!-- ★追加: ローディング表示用オーバーレイ -->
-        <div id="loading-overlay" class="loading-overlay hidden">
-            <i class="fa fa-refresh fa-spin fa-5x fa-fw" style="color: rgb(134, 201, 228)"></i>
-        </div>
-
-        <!-- サーバー接続および話者選択フィールド -->
-        <div class="field">
-            <div class="file-input-group">
-                <select id="speaker"><option value="">エンジン起動確認中...</option></select>
-                <button id="btn-connect" class="file-select-btn" type="button" title="AivisSpeech Engine接続 (Ctrl+n)">🔄接続</button>
-                <input type="text" id="input-address" placeholder="http://127.0.0.1:10101" title="サーバーアドレス">
+            <!-- トースト通知用オーバーレイ -->
+            <div id="toast-message" class="toast hidden"></div>
+            
+            <!-- ★追加: ローディング表示用オーバーレイ -->
+            <div id="loading-overlay" class="loading-overlay hidden">
+                <i class="fa fa-refresh fa-spin fa-5x fa-fw" style="color: rgb(134, 201, 228)"></i>
             </div>
-        </div>
 
-        <!-- ファイル選択・テキスト設定コントロール部 -->
-        <div class="field">
-            <div class="file-input-group">
-                <select id="font-size-select" title="文字サイズ変更">
-                    <option value="12px">小</option>
-                    <option value="16px" selected>中</option>
-                    <option value="20px">大</option>
-                    <option value="24px">特大</option>
-                </select>
-                <select id="writing-mode-select" title="テキスト向き">
-                    <option value="horizontal-tb" selected>横向き</option>
-                    <option value="vertical-rl">縦向き</option>
-                </select>
-                <button id="btn-file-select" class="btn-primary" title="ファイル選択 (Ctrl+f)">📁ファイル選択</button>
-                <span id="file-path-display" class="file-path-display">選択されていません</span>
-                <button id="btn-speak" class="btn-primary" title="再生 (Ctrl+p)">▶️再生</button>
-                <button id="btn-generate" class="btn-secondary" title="音声生成 (Ctrl+g)">🔊生成</button>
-                <button id="btn-ruby" class="btn-primary" title="読み編集 (Ctrl+r)">🖊️読み</button>
-                <button id="btn-unity" class="btn-primary" title="読み統一 (Ctrl+u)">🔠統一</button>
-                <button id="btn-save" class="btn-primary" title="テキスト保存 (Ctrl+s)">💾保存</button>
-                <button id="btn-file-clear" class="file-select-btn" type="button" title="テキストクリア (Ctrl+c)">🗑️クリア</button>
+            <!-- サーバー接続および話者選択フィールド -->
+            <div class="field">
+                <div class="file-input-group">
+                    <select id="speaker"><option value="">エンジン起動確認中...</option></select>
+                    <button id="btn-connect" class="file-select-btn" type="button" title="AivisSpeech Engine接続 (Ctrl+n)">🔄接続</button>
+                    <input type="text" id="input-address" placeholder="http://127.0.0.1:10101" title="サーバーアドレス">
+                </div>
             </div>
-        </div>
 
-        <div class="field field-text">
-            <textarea id="text" placeholder="テキストを入力するか、ファイルを読み込んでください..."></textarea>
-        </div>
-
-        <!-- ステータス・プログレスバー部分 -->
-        <div class="field">
-            <progress id="engine-progress" value="0" max="100" class="engine-progress" hidden></progress>
-            <div id="text-progress-container" class="progress-container" hidden>
-                <progress id="text-buffer-progress" value="0" max="100" class="text-buffer-progress"></progress>
-                <progress id="text-progress" value="0" max="100" class="text-progress"></progress>
+            <!-- ファイル選択・テキスト設定コントロール部 -->
+            <div class="field">
+                <div class="file-input-group">
+                    <select id="font-size-select" title="文字サイズ変更">
+                        <option value="12px">小</option>
+                        <option value="16px" selected>中</option>
+                        <option value="20px">大</option>
+                        <option value="24px">特大</option>
+                    </select>
+                    <select id="writing-mode-select" title="テキスト向き">
+                        <option value="horizontal-tb" selected>横向き</option>
+                        <option value="vertical-rl">縦向き</option>
+                    </select>
+                    <button id="btn-file-select" class="btn-primary" title="ファイル選択 (Ctrl+f)">📁ファイル選択</button>
+                    <span id="file-path-display" class="file-path-display">選択されていません</span>
+                    <button id="btn-speak" class="btn-primary" title="再生 (Ctrl+p)">▶️再生</button>
+                    <button id="btn-generate" class="btn-secondary" title="音声生成 (Ctrl+g)">🔊生成</button>
+                    <button id="btn-ruby" class="btn-primary" title="読み編集 (Ctrl+r)">🖊️読み</button>
+                    <button id="btn-unity" class="btn-primary" title="読み統一 (Ctrl+u)">🔠統一</button>
+                    <button id="btn-save" class="btn-primary" title="テキスト保存 (Ctrl+s)">💾保存</button>
+                    <button id="btn-file-clear" class="file-select-btn" type="button" title="テキストクリア (Ctrl+c)">🗑️クリア</button>
+                </div>
             </div>
-            <progress id="mp3-progress" value="0" max="100" class="mp3-progress" hidden></progress>
-        </div>
-        <div class="status" id="status">AivisSpeech Engineに接続中...</div>
 
-        <!-- 再生プレイヤー -->
-        <audio id="audio-player" class="audio-player-element" controls></audio>
-        <audio id="audio-player-next" class="audio-player-element hidden-player" controls></audio>
+            <div class="field field-text">
+                <textarea id="text" placeholder="テキストを入力するか、ファイルを読み込んでください..."></textarea>
+            </div>
+
+            <!-- ステータス・プログレスバー部分 -->
+            <div class="field">
+                <progress id="engine-progress" value="0" max="100" class="engine-progress" hidden></progress>
+                <div id="text-progress-container" class="progress-container" hidden>
+                    <progress id="text-buffer-progress" value="0" max="100" class="text-buffer-progress"></progress>
+                    <progress id="text-progress" value="0" max="100" class="text-progress"></progress>
+                </div>
+                <progress id="mp3-progress" value="0" max="100" class="mp3-progress" hidden></progress>
+            </div>
+            <div class="status" id="status">AivisSpeech Engineに接続中...</div>
+
+            <!-- 再生プレイヤー -->
+            <audio id="audio-player" class="audio-player-element" controls></audio>
+            <audio id="audio-player-next" class="audio-player-element hidden-player" controls></audio>
+        </div>
+
+        <!-- ヘルプ -->
+        <div class="help-container">
+            <div class="header-row">
+                <h1>xVoice -テキスト音声読み上げ- Ver1.00.0 ヘルプ</h1>
+                <button id="helpCloseBtn" class="btn-Close" data-tooltip="ヘルプ閉じる（Escape）">❌</button>
+            </div>
+            <div id="helpTableContainer" class="help-table-container"></div>
+        </div>
+
+        <!-- 変更履歴 -->
+        <div class="changelog-container">
+            <div class="header-row">
+                <h1>xVoice -テキスト音声読み上げ- Ver1.00.0 変更履歴</h1>
+                <button id="changelogCloseBtn" class="btn-Close" data-tooltip="変更履歴閉じる（Escape）">❌</button>
+            </div>
+            <div id="appConfigContainer" class="app-config-container" style="display: none;"></div>
+            <div id="changelogContent" class="changelog-Content"></div>
+        </div>
     </div>
 </body>
 </html>

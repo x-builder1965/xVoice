@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.28.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.31.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -63,7 +63,8 @@ body {
 }
 
 /* コンテナを画面いっぱいに広げる設定 */
-.container {
+.container,
+.main-container {
     width: 100%;
     height: 100%;
     max-width: none;
@@ -555,11 +556,9 @@ button, select, input {
     display: none;
 }
 
-
-
-
 /* ヘルプ・変更履歴用設定 */
-.help-container {
+.help-container,
+.changelog-container {
     width: 100%;
     height: 100%;
     box-sizing: border-box;
@@ -577,7 +576,7 @@ button, select, input {
     margin-bottom: 0.5em;
 }
 h1 {
-    font-size: 2.2em;
+    font-size: 1.6em;
     color: #aaccff;
     text-shadow: 0 0 0.8em rgba(0, 212, 255, 0.5);
     margin: 0;
@@ -585,7 +584,8 @@ h1 {
     position: relative;
     z-index: 1;
 }
-#helpCloseBtn {
+#helpCloseBtn,
+#changelogCloseBtn {
     position: absolute;
     right: 0;
     top: 50%;
@@ -605,16 +605,17 @@ h1 {
     transition: all 0.2s ease;
     z-index: 1000;
 }
-#helpCloseBtn:hover {
+#helpCloseBtn:hover,
+#changelogCloseBtn:hover {
     background: rgba(255, 107, 107, 0.3);
     transform: translateY(-50%) scale(1.1);
     box-shadow: 0 0 1em rgba(255, 107, 107, 0.6);
 }
-#helpCloseBtn:active {
+#helpCloseBtn:active
+#changelogCloseBtn:active {
     transform: translateY(-50%) scale(0.95);
 }
-.help-table-container,
-.changelog-container {
+.help-table-container {
     width: 100%;
     margin: 0 auto;
     border: 1px solid #333;
@@ -720,4 +721,58 @@ caption {
 }
 .icon { 
     font-size: 1.2em; 
+}
+
+/* 変更履歴のコンテナ（最初は非表示） */
+.changelog-Content {
+    overflow-y: auto;
+    font-size: 1.5rem;
+}
+
+/* スクロールバーのカスタマイズ（ダークテーマ用） */
+.changelog-Content::-webkit-scrollbar {
+    width: 8px;
+}
+.changelog-Content::-webkit-scrollbar-track {
+    background: #121212;
+}
+.changelog-Content::-webkit-scrollbar-thumb {
+    background: #999;
+    border-radius: 4px;
+}
+.changelog-Content::-webkit-scrollbar-thumb:hover {
+    background: #777;
+}
+
+/* 履歴リストのスタイル */
+.changelog-list {
+    list-style-type: none;
+    padding-left: 0;
+    margin: 0;
+}
+.changelog-list li {
+    margin-bottom: 8px;
+    border-bottom: 1px solid #2a3536;
+    padding-bottom: 6px;
+    white-space: pre-wrap; /* 改行やインデントを維持 */
+}
+/* 子要素（・付きの行）のインデントを少し下げる、または装飾用 */
+.changelog-list li.sub-item {
+    padding-left: 15px;
+    color: #b0bec5;
+    border-bottom: none;
+    padding-bottom: 2px;
+    margin-bottom: 0;
+}
+.changelog-list li:hover {
+    background-color: #404040;
+    transition: background-color 0.3s ease;
+}
+#helpCloseBtn,
+#changelogCloseBtn {
+    /* ... 既存のスタイル ... */
+    width: 1.8em;
+    height: 1.8em;
+    
+    font-size: 0.8em; /* ← ここでアイコン（❌）の大きさを調整（例: 1.0em 〜 1.5em など） */
 }

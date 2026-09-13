@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.30.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.31.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const audioCache = new Map();    // 音声データキャッシュ (key: lineIndex, value: audioData)
 
     // 🔲DOM定義🔲
+    let mainContainer = null;
     let btnTheme = null;
     let speakerSelect = null;
     let btnConnect = null;      // 「🔄接続 / ❌切断」トグルボタン
@@ -61,6 +62,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     let writingModeSelect = null;
     let toastMessage = null;
     let loadingOverlay = null;
+    let appTitle = null;
+    let verTitle = null;
+    let helpContainer = null;
+    let helpTableContainer = null;
+    let helpCloseBtn = null;
+    let helpTitle = null;
+    let changelogContainer = null;
+    let appConfigContainer = null;
+    let changelogContent = null;
+    let changelogCloseBtn = null;
+    let changelogTitle = null;
 
     // 🔲グローバル変数定義🔲
     let isPlaying = false;
@@ -79,6 +91,70 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 🔲初期設定🔲
     setupAllDomSettings();
+
+    // 初期化処理 (HTML読み込み & 設定値反映)
+    try {
+        // [処理1] index_helpTable.html の読み込みと流し込み
+        const helpRes = await fetch('index_helpTable.html');
+        if (helpRes.ok) {
+            const helpHtmlText = await helpRes.text();
+            // 取得したHTMLをhelpTableContainerへ挿入
+            if (helpTableContainer) {
+                helpTableContainer.innerHTML = helpHtmlText;
+            }
+        }
+
+        // [処理2] index_changelog.html の読み込みと流し込み
+        const changelogRes = await fetch('index_changelog.html');
+        if (changelogRes.ok) {
+            const changelogHtmlText = await changelogRes.text();
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = changelogHtmlText;
+
+            // appConfig を appConfigContainer に差し込む
+            const appConfigEl = tempDiv.querySelector('#appConfig');
+            if (appConfigEl && appConfigContainer) {
+                appConfigContainer.appendChild(appConfigEl);
+            }
+
+            // changelog-list を changelogContent に差し込む
+            const changelogListEl = tempDiv.querySelector('.changelog-list');
+            if (changelogListEl && changelogContent) {
+                changelogContent.appendChild(changelogListEl);
+            }
+        }
+
+        // [処理3] appConfig の読み込みと画面への反映
+        const appConfig = document.getElementById('appConfig');
+        if (appConfig) {
+            // dataset 経由で data-* 属性の値を取得
+            const appName = appConfig.dataset.appName || '';
+            const version = appConfig.dataset.version || '';
+
+            // 設定１: タイトル部分の設定 (アイコン画像 + appName, verTitle)
+            if (appTitle) {
+                appTitle.innerHTML = `
+                    <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
+                    ${appName}
+                `;
+            }
+            if (verTitle) {
+                verTitle.textContent = version;
+            }
+
+            // 設定２: ヘルプ画面の <h1> 設定 (appName + ' ' + version)
+            if (helpTitle) {
+                helpTitle.textContent = `${appName} ${version} ヘルプ`;
+            }
+
+            // 設定３: 変更履歴画面の <h1> 設定 (appName + ' ' + version)
+            if (changelogTitle) {
+                changelogTitle.textContent = `${appName} ${version} 変更履歴`;
+            }
+        }
+    } catch (error) {
+        console.error('初期化データの読み込みに失敗しました:', error);
+    }
 
     // アドレスの復元
     const savedAddress = localStorage.getItem(STORAGE_KEYS.SERVER_ADDRESS) || DEFAULT_HOST;
@@ -176,6 +252,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // 🔲個別イベントリスナー登録🔲
+    // app-title クリック時: ヘルプを表示 (変更履歴は非表示)
+    appTitle?.addEventListener('click', () => {
+        if (mainContainer) mainContainer.style.display = 'none';
+        if (changelogContainer) changelogContainer.style.display = 'none';
+        if (helpContainer) helpContainer.style.display = 'flex';
+    });
+
+    // ver-title クリック時: 変更履歴を表示 (ヘルプは非表示)
+    verTitle?.addEventListener('click', () => {
+        if (mainContainer) mainContainer.style.display = 'none';
+        if (helpContainer) helpContainer.style.display = 'none';
+        if (changelogContainer) changelogContainer.style.display = 'flex';
+    });
+
+    // helpCloseBtn クリック時: ヘルプを非表示
+    helpCloseBtn?.addEventListener('click', () => {
+        if (mainContainer) mainContainer.style.display = 'flex';
+        if (helpContainer) helpContainer.style.display = 'none';
+    });
+
+    // changelogCloseBtn クリック時: 変更履歴を非表示
+    changelogCloseBtn?.addEventListener('click', () => {
+        if (mainContainer) mainContainer.style.display = 'flex';
+        if (changelogContainer) changelogContainer.style.display = 'none';
+    });
+
+    // (任意補足) Escapeキー入力時にモーダルを閉じる対応
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (mainContainer) mainContainer.style.display = 'flex';
+            if (helpContainer) helpContainer.style.display = 'none';
+            if (changelogContainer) changelogContainer.style.display = 'none';
+        }
+    });
+
     // アドレス入力の保存
     inputAddress?.addEventListener('change', (e) => {
         localStorage.setItem(STORAGE_KEYS.SERVER_ADDRESS, e.target.value.trim());
@@ -635,6 +746,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 🔲初期設定関数🔲
     function setupAllDomSettings() {
+        mainContainer = document.querySelector('.main-container');
         btnTheme = document.getElementById('btn-theme');
         speakerSelect = document.getElementById('speaker');
         btnConnect = document.getElementById('btn-connect');
@@ -662,6 +774,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         writingModeSelect = document.getElementById('writing-mode-select');
         toastMessage = document.getElementById('toast-message');
         loadingOverlay = document.getElementById('loading-overlay');
+        appTitle = document.querySelector('.app-title');
+        verTitle = document.querySelector('.ver-title');
+        helpContainer = document.querySelector('.help-container');
+        helpTableContainer = document.getElementById('helpTableContainer');
+        helpCloseBtn = document.getElementById('helpCloseBtn');
+        helpTitle = helpContainer?.querySelector('h1');
+        changelogContainer = document.querySelector('.changelog-container');
+        appConfigContainer = document.getElementById('appConfigContainer');
+        changelogContent = document.getElementById('changelogContent');
+        changelogCloseBtn = document.getElementById('changelogCloseBtn');
+        changelogTitle = changelogContainer?.querySelector('h1');
     }
 
     // Engine 初期化 (アプリ起動時)
