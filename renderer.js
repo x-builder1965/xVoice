@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.26.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.27.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 🔲DOM定義🔲
     let btnTheme = null;
     let speakerSelect = null;
-    let btnConnect = null;      // 「🔄 接続 / ❌ 切断」トグルボタン
+    let btnConnect = null;      // 「🔄接続 / ❌切断」トグルボタン
     let inputAddress = null;    // 「アドレス入力」欄
     let engineProgress = null;
     let btnFileSelect = null;
@@ -306,7 +306,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.setItem(STORAGE_KEYS.TEXT, currentText);
     });
 
-    // 「🔄 接続 / ❌ 切断」トグルボタンのクリックイベント
+    // 「🔄接続 / ❌切断」トグルボタンのクリックイベント
     btnConnect?.addEventListener('click', async () => {
         await handleConnectToggle();
     });
@@ -513,7 +513,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // 「🔊 生成」 / 「❌ 中止」 クリックイベント
+    // 「🔊生成」 / 「❌中止」 クリックイベント
     btnGenerate?.addEventListener('click', () => {
         if (isGenerating) {
             isGenerateCanceled = true;
@@ -686,7 +686,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 「🔄 接続 / ❌ 切断」のトグル実行関数
+    // 「🔄接続 / ❌切断」のトグル実行関数
     async function handleConnectToggle() {
         if (isEngineReady) {
             if (statusDiv) statusDiv.textContent = 'Engine から切断中...';
@@ -739,7 +739,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!btnConnect || !inputAddress) return;
 
         if (connected) {
-            btnConnect.textContent = '❌ 切断';
+            btnConnect.textContent = '❌切断';
             btnConnect.title = 'AivisSpeech Engine切断 (Ctrl+n)'; // 接続時：切断用のツールチップ
             btnConnect.disabled = false;
             inputAddress.disabled = true; // 接続時はアドレス編集不可
@@ -751,7 +751,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // if (fontSizeSelect) fontSizeSelect.disabled = false;
             // if (writingModeSelect) writingModeSelect.disabled = false;
         } else {
-            btnConnect.textContent = '🔄 接続';
+            btnConnect.textContent = '🔄接続';
             btnConnect.title = 'AivisSpeech Engine接続 (Ctrl+n)'; // 未接続時：接続用のツールチップ
             btnConnect.disabled = false;
             inputAddress.disabled = false; // 未接続時はアドレス編集可能
@@ -901,7 +901,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         isGenerating = false;
         isGenerateCanceled = false;
         if (btnGenerate) {
-            btnGenerate.textContent = '🔊 生成';
+            btnGenerate.textContent = '🔊生成';
             btnGenerate.title = '音声生成 (Ctrl+g)';
             btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
         }
@@ -1161,7 +1161,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         isGenerating = true;
         isGenerateCanceled = false;
 
-        btnGenerate.textContent = '❌ 中止';
+        btnGenerate.textContent = '❌中止';
         btnGenerate.title = '生成中止 (Ctrl+g)';
         btnGenerate.disabled = false;
         btnSpeak.disabled = true;
