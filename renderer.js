@@ -10,12 +10,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const STORAGE_KEYS = {
         FILE_PATH: 'xVoice_filePath',
         TEXT: 'xVoice_text',
+        TEXT_BACKUP: 'xVoice_textBackup',
         LINE_INDEX: 'xVoice_lineIndex',
         VOLUME: 'xVoice_volume',
         FONT_SIZE: 'xVoice_fontSize',
         SPEAKER: 'xVoice_speaker',
         TEXT_DIRECTION: 'xVoice_textDirection',
-        TEXT_BACKUP: 'xVoice_textBackup',
         SERVER_ADDRESS: 'xVoice_serverAddress'
     };
     // ショートカットキーと各ボタンのIDのマッピング定義
@@ -283,7 +283,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         previousText = '';
         textBackup = '';
         btnSave.classList.remove('change-active');
-        localStorage.setItem(STORAGE_KEYS.TEXT_BACKUP, textBackup);
     
         // ★ クリア時のリセット処理
         if (isPlaying) {
@@ -295,6 +294,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.removeItem(STORAGE_KEYS.FILE_PATH);
         localStorage.removeItem(STORAGE_KEYS.TEXT);
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+        localStorage.removeItem(STORAGE_KEYS.TEXT_BACKUP);
     });
 
     // テキストの入力イベント
@@ -879,12 +879,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         previousText = loadedText;
         textBackup = loadedText;
         btnSave.classList.remove('change-active');
-        localStorage.setItem(STORAGE_KEYS.TEXT_BACKUP, textBackup);
         currentLineIndex = 0;
         isFirstPlay = true;
 
         localStorage.setItem(STORAGE_KEYS.TEXT, loadedText);
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+        localStorage.setItem(STORAGE_KEYS.TEXT_BACKUP, loadedText);
+
+const testBackup = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP);
 
         if (btnGenerate) btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
 

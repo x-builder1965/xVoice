@@ -247,7 +247,6 @@ function createWindow() {
 
         // 自動的にDevToolsを開く
         mainWindow.webContents.openDevTools();
-        // mainWindow.webContents.closeDevTools();
 
         // 万が一DevToolsが開かなくても1秒後にはフォールバックでロード
         setTimeout(() => {
@@ -258,7 +257,7 @@ function createWindow() {
         loadApp();
     }
     // --------------------------------------
-
+    
     mainWindow.maximize();
 
     mainWindow.once('ready-to-show', () => {
