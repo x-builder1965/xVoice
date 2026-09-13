@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.27.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.28.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -534,6 +534,25 @@ button, select, input {
 }
 .hidden-player {
     display: none !important;
+}
+
+/* ローディング用オーバーレイ */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.3); /* 背景をうっすら暗くする場合 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+/* 非表示用クラス */
+.loading-overlay.hidden {
+    display: none;
 }
 
 

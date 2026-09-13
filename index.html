@@ -1,13 +1,14 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.27.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.28.0';
  --------------------------------------------------------------------- -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <title>xVoice - AivisSpeech Client</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <link rel="stylesheet" href="style.css">
     <script src="renderer.js" defer></script>
 </head>
@@ -27,6 +28,11 @@
         <!-- トースト通知用オーバーレイ -->
         <div id="toast-message" class="toast hidden"></div>
         
+        <!-- ★追加: ローディング表示用オーバーレイ -->
+        <div id="loading-overlay" class="loading-overlay hidden">
+            <i class="fa fa-refresh fa-spin fa-5x fa-fw" style="color: rgb(134, 201, 228)"></i>
+        </div>
+
         <!-- サーバー接続および話者選択フィールド -->
         <div class="field">
             <div class="file-input-group">

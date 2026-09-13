@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.27.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.28.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -59,6 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let textElem = null;
     let writingModeSelect = null;
     let toastMessage = null;
+    let loadingOverlay = null;
 
     // 🔲グローバル変数定義🔲
     let isPlaying = false;
@@ -652,6 +653,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         textElem = document.getElementById('text');
         writingModeSelect = document.getElementById('writing-mode-select');
         toastMessage = document.getElementById('toast-message');
+        loadingOverlay = document.getElementById('loading-overlay');
     }
 
     // Engine 初期化 (アプリ起動時)
@@ -714,6 +716,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (inputAddress) inputAddress.disabled = true;
     
             const address = getServerAddress();
+            // ★ リクエスト送信前にローディング表示
+            showLoading(true);
             const res = await window.api.connectEngine(address);
     
             if (typeof engineProgress !== 'undefined' && engineProgress) {
@@ -731,6 +735,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 updateConnectionUI(false);
                 showToast(res.error || '接続に失敗しました', 'error');
             }
+            // ★ レスポンス受領後（成功・失敗問わず）にローディング非表示
+            showLoading(false);
         }
     }
 
@@ -918,6 +924,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 話者一覧取得 (動的アドレス対応)
     async function loadSpeakers() {
         try {
+            // ★ リクエスト送信前にローディング表示
+            showLoading(true);
             const baseUrl = getServerAddress();
             const res = await fetch(`${baseUrl}/speakers`);
             if (!res.ok) throw new Error();
@@ -944,9 +952,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             showToast('話者モデル取得完了');
+            // ★ レスポンス受領後（成功・失敗問わず）にローディング非表示
+            showLoading(false);
             return true;
         } catch (err) {
             showToast('Engine に接続できません', 'error');
+            // ★ レスポンス受領後（成功・失敗問わず）にローディング非表示
+            showLoading(false);
             return false;
         }
     }
@@ -1053,8 +1065,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (audioCache.has(i)) {
                         audioData = audioCache.get(i);
                     } else {
-                        audioData = await fetchAudioBuffer(lineTrimmed, currentSpeakerId);
-                        // ※ fetchAudioBuffer 内で audioCache.set(i, audioData) されている前提
+                        // ★ リクエスト送信前にローディング表示
+                        showLoading(true);
+                        try {
+                            audioData = await fetchAudioBuffer(lineTrimmed, currentSpeakerId);
+                            // ※ fetchAudioBuffer 内で audioCache.set(i, audioData) されている前提
+                        } finally {
+                            // ★ レスポンス受領後（成功・失敗問わず）にローディング非表示
+                            showLoading(false);
+                        }
                     }
     
                     // ★ 修正点: 以前あった audioCache.delete(i); は削除します
@@ -1538,5 +1557,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     function resetProgressBars() {
         if (textProgressBar) textProgressBar.value = 0;
         if (textBufferProgressBar) textBufferProgressBar.value = 0;
+    }
+
+    // オーバーレイ表示・非表示切り替えヘルパー
+    function showLoading(show) {
+        if (!loadingOverlay) return;
+        if (show) {
+            loadingOverlay.classList.remove('hidden');
+        } else {
+            loadingOverlay.classList.add('hidden');
+        }
     }
 });
