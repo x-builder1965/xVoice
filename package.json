@@ -43,6 +43,8 @@
       "renderer.js",
       "style.css",
       "index.html",
+      "index_helpTable.html",
+      "index_changelog.html",
       "xVoice.ico",
       "xVoice.png",
       "README.md"

@@ -90,71 +90,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     let isPrefetching = false;    // ループ重複実行防止フラグ
 
     // 🔲初期設定🔲
-    setupAllDomSettings();
+    // DOM取得
+    await setupAllDomSettings();
 
-    // 初期化処理 (HTML読み込み & 設定値反映)
-    try {
-        // [処理1] index_helpTable.html の読み込みと流し込み
-        const helpRes = await fetch('index_helpTable.html');
-        if (helpRes.ok) {
-            const helpHtmlText = await helpRes.text();
-            // 取得したHTMLをhelpTableContainerへ挿入
-            if (helpTableContainer) {
-                helpTableContainer.innerHTML = helpHtmlText;
-            }
-        }
-
-        // [処理2] index_changelog.html の読み込みと流し込み
-        const changelogRes = await fetch('index_changelog.html');
-        if (changelogRes.ok) {
-            const changelogHtmlText = await changelogRes.text();
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = changelogHtmlText;
-
-            // appConfig を appConfigContainer に差し込む
-            const appConfigEl = tempDiv.querySelector('#appConfig');
-            if (appConfigEl && appConfigContainer) {
-                appConfigContainer.appendChild(appConfigEl);
-            }
-
-            // changelog-list を changelogContent に差し込む
-            const changelogListEl = tempDiv.querySelector('.changelog-list');
-            if (changelogListEl && changelogContent) {
-                changelogContent.appendChild(changelogListEl);
-            }
-        }
-
-        // [処理3] appConfig の読み込みと画面への反映
-        const appConfig = document.getElementById('appConfig');
-        if (appConfig) {
-            // dataset 経由で data-* 属性の値を取得
-            const appName = appConfig.dataset.appName || '';
-            const version = appConfig.dataset.version || '';
-
-            // 設定１: タイトル部分の設定 (アイコン画像 + appName, verTitle)
-            if (appTitle) {
-                appTitle.innerHTML = `
-                    <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
-                    ${appName}
-                `;
-            }
-            if (verTitle) {
-                verTitle.textContent = version;
-            }
-
-            // 設定２: ヘルプ画面の <h1> 設定 (appName + ' ' + version)
-            if (helpTitle) {
-                helpTitle.textContent = `${appName} ${version} ヘルプ`;
-            }
-
-            // 設定３: 変更履歴画面の <h1> 設定 (appName + ' ' + version)
-            if (changelogTitle) {
-                changelogTitle.textContent = `${appName} ${version} 変更履歴`;
-            }
-        }
-    } catch (error) {
-        console.error('初期化データの読み込みに失敗しました:', error);
-    }
+    // HTMLロード
+    await setupHTMLLoad();
 
     // アドレスの復元
     const savedAddress = localStorage.getItem(STORAGE_KEYS.SERVER_ADDRESS) || DEFAULT_HOST;
@@ -745,7 +685,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initEngine();
 
     // 🔲初期設定関数🔲
-    function setupAllDomSettings() {
+    async function setupAllDomSettings() {
         mainContainer = document.querySelector('.main-container');
         btnTheme = document.getElementById('btn-theme');
         speakerSelect = document.getElementById('speaker');
@@ -785,6 +725,73 @@ document.addEventListener('DOMContentLoaded', async () => {
         changelogContent = document.getElementById('changelogContent');
         changelogCloseBtn = document.getElementById('changelogCloseBtn');
         changelogTitle = changelogContainer?.querySelector('h1');
+    }
+
+    // HTMLロード
+    async function setupHTMLLoad() {
+        // 初期化処理 (HTML読み込み & 設定値反映)
+        try {
+            // [処理1] index_helpTable.html の読み込みと流し込み
+            const helpRes = await fetch('index_helpTable.html');
+            if (helpRes.ok) {
+                const helpHtmlText = await helpRes.text();
+                // 取得したHTMLをhelpTableContainerへ挿入
+                if (helpTableContainer) {
+                    helpTableContainer.innerHTML = helpHtmlText;
+                }
+            }
+
+            // [処理2] index_changelog.html の読み込みと流し込み
+            const changelogRes = await fetch('index_changelog.html');
+            if (changelogRes.ok) {
+                const changelogHtmlText = await changelogRes.text();
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = changelogHtmlText;
+
+                // appConfig を appConfigContainer に差し込む
+                const appConfigEl = tempDiv.querySelector('#appConfig');
+                if (appConfigEl && appConfigContainer) {
+                    appConfigContainer.appendChild(appConfigEl);
+                }
+
+                // changelog-list を changelogContent に差し込む
+                const changelogListEl = tempDiv.querySelector('.changelog-list');
+                if (changelogListEl && changelogContent) {
+                    changelogContent.appendChild(changelogListEl);
+                }
+            }
+
+            // [処理3] appConfig の読み込みと画面への反映
+            const appConfig = document.getElementById('appConfig');
+            if (appConfig) {
+                // dataset 経由で data-* 属性の値を取得
+                const appName = appConfig.dataset.appName || '';
+                const version = appConfig.dataset.version || '';
+
+                // 設定１: タイトル部分の設定 (アイコン画像 + appName, verTitle)
+                if (appTitle) {
+                    appTitle.innerHTML = `
+                        <img src="xVoice.ico" alt="xVoice Icon" class="title-icon">
+                        ${appName}
+                    `;
+                }
+                if (verTitle) {
+                    verTitle.textContent = version;
+                }
+
+                // 設定２: ヘルプ画面の <h1> 設定 (appName + ' ' + version)
+                if (helpTitle) {
+                    helpTitle.textContent = `${appName} ${version} ヘルプ`;
+                }
+
+                // 設定３: 変更履歴画面の <h1> 設定 (appName + ' ' + version)
+                if (changelogTitle) {
+                    changelogTitle.textContent = `${appName} ${version} 変更履歴`;
+                }
+            }
+        } catch (error) {
+            console.error('初期化データの読み込みに失敗しました:', error);
+        }
     }
 
     // Engine 初期化 (アプリ起動時)
