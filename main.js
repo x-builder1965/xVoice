@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.24.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.29.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -228,7 +228,37 @@ function createWindow() {
         show: false // ちらつき防止
     });
 
-    mainWindow.loadFile('index.html');
+    // --- ★デバッガ・アタッチ待ち対応★ ---
+    let isLoaded = false;
+    const loadApp = () => {
+        if (!isLoaded) {
+            isLoaded = true;
+            mainWindow.loadFile('index.html');
+            mainWindow.webContents.closeDevTools();
+        }
+    };
+
+    // 開発パッケージ未構成時またはデバッグ用の処理
+    if (!app.isPackaged) {
+        // DevToolsが開かれたらロードを開始（アタッチ完了を保証）
+        mainWindow.webContents.once('devtools-opened', () => {
+            loadApp();
+        });
+
+        // 自動的にDevToolsを開く
+        mainWindow.webContents.openDevTools();
+        // mainWindow.webContents.closeDevTools();
+
+        // 万が一DevToolsが開かなくても1秒後にはフォールバックでロード
+        setTimeout(() => {
+            loadApp();
+        }, 1000);
+    } else {
+        // 本番ビルド時は直接ロード
+        loadApp();
+    }
+    // --------------------------------------
+
     mainWindow.maximize();
 
     mainWindow.once('ready-to-show', () => {

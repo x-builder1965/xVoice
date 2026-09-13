@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.28.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.29.0';
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲イミディエイト定義🔲
@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         FONT_SIZE: 'xVoice_fontSize',
         SPEAKER: 'xVoice_speaker',
         TEXT_DIRECTION: 'xVoice_textDirection',
+        TEXT_BACKUP: 'xVoice_textBackup',
         SERVER_ADDRESS: 'xVoice_serverAddress'
     };
     // ショートカットキーと各ボタンのIDのマッピング定義
@@ -102,19 +103,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const launchData = await window.api.getLaunchArgs();
     if (launchData) {
         // ★１ & ★３：起動時引数が存在する場合、localStorageからの復元をスキップして引数のデータで画面を更新
-        // ファイルパスの復元
+        // 引数ファイルパスの設定
         if (filePathDisplay) {
             filePathDisplay.textContent = launchData.filePath;
             updateFilePathMarquee();
         }
 
-        // テキストの復元
+        // 引数ファイルのテキストの設定
         if (textInput) {
             const normalizedContent = launchData.content.replace(/\r\n/g, '\n');
             textInput.value = normalizedContent;
             previousText = normalizedContent;
-            textBackup = normalizedContent;
-            if (btnSave) btnSave.classList.remove('change-active');
         }
 
         // 再生位置の初期化
@@ -140,8 +139,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             const normalizedSavedText = savedText.replace(/\r\n/g, '\n');
             textInput.value = normalizedSavedText;
             previousText = normalizedSavedText;
-            textBackup = normalizedSavedText;
-            if (btnSave) btnSave.classList.remove('change-active');
         }
 
         // 再生位置の復元
@@ -149,6 +146,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (savedLineIndex !== null) {
             currentLineIndex = parseInt(savedLineIndex, 10) || 0;
         }
+    }
+
+    // テキストバックアップの復元
+    const savedTextBackup = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP) || '';
+    textBackup = savedTextBackup;
+    if (textBackup !== textInput.value) {
+        if (btnSave) btnSave.classList.add('change-active');
     }
 
     // テキスト向きの復元
@@ -277,6 +281,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         previousText = '';
         textBackup = '';
         btnSave.classList.remove('change-active');
+        localStorage.setItem(STORAGE_KEYS.TEXT_BACKUP, textBackup);
     
         // ★ クリア時のリセット処理
         if (isPlaying) {
@@ -502,6 +507,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('保存完了:', result.filePath);
             textBackup = textInput.value;
             btnSave.classList.remove('change-active');
+            localStorage.setItem(STORAGE_KEYS.TEXT_BACKUP, textBackup);
         }
     });
 
@@ -871,6 +877,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         previousText = loadedText;
         textBackup = loadedText;
         btnSave.classList.remove('change-active');
+        localStorage.setItem(STORAGE_KEYS.TEXT_BACKUP, textBackup);
         currentLineIndex = 0;
         isFirstPlay = true;
 
