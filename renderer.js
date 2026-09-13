@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         clearAudioCache();   // キャッシュクリア
         resetProgressBars(); // 進捗バーを0%にリセット
-    
+
         localStorage.removeItem(STORAGE_KEYS.FILE_PATH);
         localStorage.removeItem(STORAGE_KEYS.TEXT);
         localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
@@ -889,6 +889,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (btnGenerate) btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
 
         clearAudioCache();
+        resetProgressBars();
         moveCursorToLineStart(0);
     }
 
