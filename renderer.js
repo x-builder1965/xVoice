@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.32.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.34.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -31,6 +31,7 @@ const shortcutMap = {
 };
 const PREFETCH_LINES = 10;       // 常に何行先までキャッシュ（先読み）を維持するか
 const audioCache = new Map();    // 音声データキャッシュ (key: lineIndex, value: audioData)
+const settingsFilePath = getUserSettingsPath(); // 設定ファイルパス取得
 
 // 🔲DOM定義🔲
 let mainContainer = null;
@@ -73,7 +74,11 @@ let changelogContent = null;
 let changelogCloseBtn = null;
 let changelogTitle = null;
 
+// 🔲localStorage復元🔲
+let localSettings = {};
+
 // 🔲グローバル変数定義🔲
+let isSecondary = false;
 let isPlaying = false;
 let isStopped = false;
 let isLineJumped = false;     // 再生中の行ジャンプ用フラグ
@@ -90,10 +95,20 @@ let isPrefetching = false;    // ループ重複実行防止フラグ
 
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲初期設定🔲
-    // DOM取得
-    await setupAllDomSettings();
-    // HTMLロード
-    await setupHTMLLoad();
+    try {
+        // 多重起動（セカンダリインスタンス）判定
+        isSecondary = await window.api.checkIsSecondaryInstance();
+        // DOM取得
+        await setupAllDomSettings();
+        // 多重起動時の localStorage 書き込み防止処理
+        setupLocalStorageProtection();
+        // localStorage復元
+        await setupAllLocalStorageSetting();
+        // HTMLロード
+        await setupHTMLLoad();
+    } catch (err) {
+        console.error('初期化エラー:', err);
+    }
 
     // アドレスの復元
     setupAddress();
@@ -162,8 +177,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerBtnConnectClick();
     // 話者リストの変更イベント
     registerSpeakerSelectChange();
-    // テキストの変更イベント
-    registerTextInputInput();
     // 🖊️読み編集のクリックイベント
     registerBtnRubyClick();
     // 🔠統一編集のクリックイベント
@@ -234,6 +247,73 @@ async function setupAllDomSettings() {
     changelogTitle = changelogContainer?.querySelector('h1');
 }
 
+// 多重起動時の localStorage 書き込み防止処理
+async function setupLocalStorageProtection() {
+    if (isSecondary) {
+        console.warn('⚠️ 多重起動を検知しました。localStorage への書き込みを無効化します。');
+
+        // 原型のメソッドを保持
+        const originalSetItem = localStorage.setItem.bind(localStorage);
+        const originalClear = localStorage.clear.bind(localStorage);
+        const originalRemoveItem = localStorage.removeItem.bind(localStorage);
+
+        // setItem をガード
+        localStorage.setItem = function (key, value) {
+            console.log(`[多重起動ガード] setItem スキップ: ${key}`);
+            // 何もせず書き込みをスキップ
+        };
+
+        // clear をガード
+        localStorage.clear = function () {
+            console.log('[多重起動ガード] clear スキップ');
+        };
+
+        // removeItem をガード
+        localStorage.removeItem = function (key) {
+            console.log(`[多重起動ガード] removeItem スキップ: ${key}`);
+        };
+    }
+}
+
+// localStorage復元
+async function setupAllLocalStorageSetting() {
+    if (!isSecondary) {
+        // --- 初回起動（Primary）---
+        localSettings[STORAGE_KEYS.FILE_PATH] = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
+        localSettings[STORAGE_KEYS.SERVER_ADDRESS] = localStorage.getItem(STORAGE_KEYS.SERVER_ADDRESS) || DEFAULT_HOST;
+        localSettings[STORAGE_KEYS.VOLUME] = localStorage.getItem(STORAGE_KEYS.VOLUME) || '0.2';
+        localSettings[STORAGE_KEYS.FONT_SIZE] = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
+        localSettings[STORAGE_KEYS.TEXT] = localStorage.getItem(STORAGE_KEYS.TEXT);
+        localSettings[STORAGE_KEYS.LINE_INDEX] = localStorage.getItem(STORAGE_KEYS.LINE_INDEX);
+        localSettings[STORAGE_KEYS.TEXT_BACKUP] = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP) || '';
+        localSettings[STORAGE_KEYS.TEXT_DIRECTION] = localStorage.getItem(STORAGE_KEYS.TEXT_DIRECTION) || 'horizontal-tb';
+        localSettings[STORAGE_KEYS.SPEAKER] = localStorage.getItem(STORAGE_KEYS.SPEAKER);
+
+        await exportSettingsToFile(settingsFilePath);
+
+    } else {
+        // --- 多重起動（Secondary）---
+        const loadedSettings = await importSettingsFromFile(settingsFilePath) || {};
+
+        const getVal = (key, currentVal, defaultValue = null) => {
+            if (loadedSettings[key] !== undefined && loadedSettings[key] !== null) {
+                return loadedSettings[key];
+            }
+            return currentVal ?? defaultValue;
+        };
+
+        localSettings[STORAGE_KEYS.FILE_PATH] = getVal(STORAGE_KEYS.FILE_PATH, localSettings[STORAGE_KEYS.FILE_PATH], null);
+        localSettings[STORAGE_KEYS.SERVER_ADDRESS] = getVal(STORAGE_KEYS.SERVER_ADDRESS, localSettings[STORAGE_KEYS.SERVER_ADDRESS], DEFAULT_HOST);
+        localSettings[STORAGE_KEYS.VOLUME] = getVal(STORAGE_KEYS.VOLUME, localSettings[STORAGE_KEYS.VOLUME], '0.2');
+        localSettings[STORAGE_KEYS.FONT_SIZE] = getVal(STORAGE_KEYS.FONT_SIZE, localSettings[STORAGE_KEYS.FONT_SIZE], '16px');
+        localSettings[STORAGE_KEYS.TEXT] = getVal(STORAGE_KEYS.TEXT, localSettings[STORAGE_KEYS.TEXT], null);
+        localSettings[STORAGE_KEYS.LINE_INDEX] = getVal(STORAGE_KEYS.LINE_INDEX, localSettings[STORAGE_KEYS.LINE_INDEX], null);
+        localSettings[STORAGE_KEYS.TEXT_BACKUP] = getVal(STORAGE_KEYS.TEXT_BACKUP, localSettings[STORAGE_KEYS.TEXT_BACKUP], '');
+        localSettings[STORAGE_KEYS.TEXT_DIRECTION] = getVal(STORAGE_KEYS.TEXT_DIRECTION, localSettings[STORAGE_KEYS.TEXT_DIRECTION], 'horizontal-tb');
+        localSettings[STORAGE_KEYS.SPEAKER] = getVal(STORAGE_KEYS.SPEAKER, localSettings[STORAGE_KEYS.SPEAKER], null);
+    }
+}
+
 // HTMLロード
 async function setupHTMLLoad() {
     // 初期化処理 (HTML読み込み & 設定値反映)
@@ -283,7 +363,8 @@ async function setupHTMLLoad() {
                 `;
             }
             if (verTitle) {
-                verTitle.textContent = version;
+                const secondaryIcon = isSecondary ? '🚫' : '';
+                verTitle.textContent = `${version} ${secondaryIcon}`;
             }
 
             // 設定２: ヘルプ画面の <h1> 設定 (appName + ' ' + version)
@@ -303,27 +384,24 @@ async function setupHTMLLoad() {
 
 // アドレスの復元
 function setupAddress() {
-    const savedAddress = localStorage.getItem(STORAGE_KEYS.SERVER_ADDRESS) || DEFAULT_HOST;
     if (inputAddress) {
-        inputAddress.value = savedAddress;
+        inputAddress.value = localSettings[STORAGE_KEYS.SERVER_ADDRESS];
     }
 }
 
 // 音量設定の復元
 function setupVolume() {
-    const savedVolume = localStorage.getItem(STORAGE_KEYS.VOLUME) || '0.2';
     if (audioPlayer) {
-        audioPlayer.volume = savedVolume;
+        audioPlayer.volume = localSettings[STORAGE_KEYS.VOLUME];
     }
     if (audioPlayerNext) {
-        audioPlayerNext.volume = savedVolume;
+        audioPlayerNext.volume = localSettings[STORAGE_KEYS.VOLUME];
     }
 }
 
 // フォントサイズ選択の復元
 function setupFontSize() {
-    const savedFontSize = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
-    applyFontSize(savedFontSize);
+    applyFontSize(localSettings[STORAGE_KEYS.FONT_SIZE]);
 }
 
 // 引数ファイルパスの設定
@@ -348,9 +426,9 @@ function setupFilePathAndTextArgs() {
     currentLineIndex = 0;
 
     // localStorage も起動引数の値に上書き更新
-    localStorage.setItem(STORAGE_KEYS.FILE_PATH, launchData.filePath);
-    localStorage.setItem(STORAGE_KEYS.TEXT, launchData.content);
-    localStorage.setItem(STORAGE_KEYS.LINE_INDEX, '0');
+    localStorageSetItemAndFile(STORAGE_KEYS.FILE_PATH, launchData.filePath);
+    localStorageSetItemAndFile(STORAGE_KEYS.TEXT, launchData.content);
+    localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, '0');
 }
 
 // ファイルパス＆テキストの復元
@@ -358,29 +436,25 @@ function setupFilePathAndText() {
     // 起動時引数がない場合は従来通り localStorage から復元
 
     // ファイルパスの復元
-    const savedFilePath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
-    if (savedFilePath && filePathDisplay) {
-        filePathDisplay.textContent = savedFilePath;
+    if (localSettings[STORAGE_KEYS.FILE_PATH] && filePathDisplay) {
+        filePathDisplay.textContent = localSettings[STORAGE_KEYS.FILE_PATH];
         updateFilePathMarquee();
     }
 
     // テキストの復元
-    const savedText = localStorage.getItem(STORAGE_KEYS.TEXT);
-    if (savedText !== null && textInput) {
-        const normalizedSavedText = savedText.replace(/\r\n/g, '\n');
-        textInput.value = normalizedSavedText;
-        previousText = normalizedSavedText;
+    if (localSettings[STORAGE_KEYS.TEXT] !== null && textInput) {
+        const normalizedlocalSettings = localSettings[STORAGE_KEYS.TEXT].replace(/\r\n/g, '\n');
+        textInput.value = normalizedlocalSettings;
+        previousText = normalizedlocalSettings;
     }
 
     // 再生位置の復元
-    const savedLineIndex = localStorage.getItem(STORAGE_KEYS.LINE_INDEX);
-    if (savedLineIndex !== null) {
-        currentLineIndex = parseInt(savedLineIndex, 10) || 0;
+    if (localSettings[STORAGE_KEYS.LINE_INDEX] !== null) {
+        currentLineIndex = parseInt(localSettings[STORAGE_KEYS.LINE_INDEX], 10) || 0;
     }
 
     // テキストバックアップの復元
-    const savedTextBackup = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP) || '';
-    textBackup = savedTextBackup;
+    textBackup = localSettings[STORAGE_KEYS.TEXT_BACKUP];
     if (textBackup !== textInput.value) {
         if (btnSave) btnSave.classList.add('change-active');
     }
@@ -388,8 +462,7 @@ function setupFilePathAndText() {
 
 // テキスト向きの復元
 function setupTextDirection() {
-    const savedTextDirection = localStorage.getItem(STORAGE_KEYS.TEXT_DIRECTION) || 'horizontal-tb';
-    applyTextDirection(savedTextDirection);
+    applyTextDirection(localSettings[STORAGE_KEYS.TEXT_DIRECTION]);
 }
 
 // テーマ設定の復元
@@ -595,14 +668,14 @@ function registerChangelogCloseBtnClick() {
 // アドレスの入力イベント
 function registerInputAddressChange() {
     inputAddress?.addEventListener('change', (e) => {
-        localStorage.setItem(STORAGE_KEYS.SERVER_ADDRESS, e.target.value.trim());
+        localStorageSetItemAndFile(STORAGE_KEYS.SERVER_ADDRESS, e.target.value.trim());
     });
 }
 
 // 話者モデルの変更イベント
 function registerSpeakerSelectChange() {
     speakerSelect?.addEventListener('change', (e) => {
-        localStorage.setItem(STORAGE_KEYS.SPEAKER, e.target.value);
+        localStorageSetItemAndFile(STORAGE_KEYS.SPEAKER, e.target.value);
     });
 }
 
@@ -679,7 +752,7 @@ function registerBtnFileClearClick() {
 
         localStorage.removeItem(STORAGE_KEYS.FILE_PATH);
         localStorage.removeItem(STORAGE_KEYS.TEXT);
-        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+        localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, 0);
         localStorage.removeItem(STORAGE_KEYS.TEXT_BACKUP);
     });
 }
@@ -699,7 +772,8 @@ function registerTextInputInput() {
             btnSave.classList.remove('change-active');
         }
 
-        localStorage.setItem(STORAGE_KEYS.TEXT, currentText);
+        clearAudioCache();
+        localStorageSetItemAndFile(STORAGE_KEYS.TEXT, currentText);
     });
 }
 
@@ -715,14 +789,6 @@ function registerSpeakerSelectChange() {
     speakerSelect.addEventListener('change', () => {
         clearAudioCache();
         // 必要に応じてプリフェッチのリセットや停止処理
-    });
-}
-
-// テキストの変更イベント
-function registerTextInputInput() {
-    textInput.addEventListener('input', () => {
-        // テキストが変わったら古いキャッシュは無効化する
-        clearAudioCache();
     });
 }
 
@@ -909,7 +975,7 @@ function registerBtnSaveClick() {
             console.log('保存完了:', result.filePath);
             textBackup = textInput.value;
             btnSave.classList.remove('change-active');
-            localStorage.setItem(STORAGE_KEYS.TEXT_BACKUP, textBackup);
+            localStorageSetItemAndFile(STORAGE_KEYS.TEXT_BACKUP, textBackup);
         }
     });
 }
@@ -1089,7 +1155,7 @@ function applyTextDirection(direction) {
 
     textInput.style.writingMode = direction;
     if (writingModeSelect) writingModeSelect.value = direction;
-    localStorage.setItem(STORAGE_KEYS.TEXT_DIRECTION, direction);
+    localStorageSetItemAndFile(STORAGE_KEYS.TEXT_DIRECTION, direction);
 
     if (textElem) {
         textElem.classList.toggle('is-vertical', direction === 'vertical-rl');
@@ -1108,7 +1174,7 @@ function applyFontSize(size) {
     textInput.style.fontSize = size;
     if (filePathDisplay) filePathDisplay.style.fontSize = size;
     if (fontSizeSelect) fontSizeSelect.value = size;
-    localStorage.setItem(STORAGE_KEYS.FONT_SIZE, size);
+    localStorageSetItemAndFile(STORAGE_KEYS.FONT_SIZE, size);
 
     updateFilePathMarquee();
 
@@ -1134,7 +1200,7 @@ function showProgressBar(type) {
 
 function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
+    localStorageSetItemAndFile('theme', theme);
     if (btnTheme) btnTheme.textContent = theme === 'dark' ? '☀️' : '🌙';
 }
 
@@ -1153,7 +1219,7 @@ function handleCursorChange() {
     const targetLineIndex = getCursorLineIndex();
     if (targetLineIndex !== currentLineIndex) {
         currentLineIndex = targetLineIndex;
-        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
+        localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
 
         // キャッシュとバッファ表示をクリア＆移動後の位置に同期
         clearAudioCache();
@@ -1169,7 +1235,7 @@ function loadFileContent(path, content) {
     const loadedText = (content || '').replace(/\r\n/g, '\n');
 
     if (filePathDisplay) filePathDisplay.textContent = path;
-    localStorage.setItem(STORAGE_KEYS.FILE_PATH, path);
+    localStorageSetItemAndFile(STORAGE_KEYS.FILE_PATH, path);
 
     updateFilePathMarquee();
 
@@ -1180,9 +1246,9 @@ function loadFileContent(path, content) {
     currentLineIndex = 0;
     isFirstPlay = true;
 
-    localStorage.setItem(STORAGE_KEYS.TEXT, loadedText);
-    localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
-    localStorage.setItem(STORAGE_KEYS.TEXT_BACKUP, loadedText);
+    localStorageSetItemAndFile(STORAGE_KEYS.TEXT, loadedText);
+    localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, 0);
+    localStorageSetItemAndFile(STORAGE_KEYS.TEXT_BACKUP, loadedText);
 
     if (btnGenerate) btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
 
@@ -1251,11 +1317,10 @@ async function loadSpeakers() {
                 });
             });
 
-            const savedSpeaker = localStorage.getItem(STORAGE_KEYS.SPEAKER);
-            if (savedSpeaker) {
-                const exists = Array.from(speakerSelect.options).some(opt => opt.value === String(savedSpeaker));
+            if (localSettings[STORAGE_KEYS.SPEAKER]) {
+                const exists = Array.from(speakerSelect.options).some(opt => opt.value === String(localSettings[STORAGE_KEYS.SPEAKER]));
                 if (exists) {
-                    speakerSelect.value = savedSpeaker;
+                    speakerSelect.value = localSettings[STORAGE_KEYS.SPEAKER];
                 }
             }
         }
@@ -1318,13 +1383,13 @@ async function playLineByLine() {
     }
 
     currentLineIndex = getCursorLineIndex();
-    localStorage.setItem(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
+    localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
 
     isFirstPlay = false;
 
     if (currentLineIndex >= lines.length) {
         currentLineIndex = lines.length;
-        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, lines.length);
+        localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, lines.length);
     }
 
     updateButtonStates(true);
@@ -1352,7 +1417,7 @@ async function playLineByLine() {
         if (isStopped) break;
 
         const i = currentLineIndex;
-        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, i);
+        localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, i);
 
         const progressPercent = Math.round(((i + 1) / lines.length) * 100);
         if (textProgressBar) {
@@ -1469,7 +1534,7 @@ async function playLineByLine() {
     if (!isStopped && !isLineJumped) {
         clearAudioCache(); // 最後まで再生しきった場合のみクリア
         currentLineIndex = 0;
-        localStorage.setItem(STORAGE_KEYS.LINE_INDEX, 0);
+        localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, 0);
         showToast('再生完了');
         if (textProgressBar) textProgressBar.value = 100;
         if (textBufferProgressBar) textBufferProgressBar.value = 100;
@@ -1531,9 +1596,8 @@ async function generateFullTextMp3() {
         if (statusDiv) statusDiv.textContent = 'MP3へ変換・保存中...';
 
         let defaultFilename = 'xVoice生成.mp3';
-        const generatedPath = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
-        if (generatedPath && generatedPath !== '選択されていません') {
-            const parts = generatedPath.split(/[/\\]/);
+        if (localSettings[STORAGE_KEYS.FILE_PATH]) {
+            const parts = localSettings[STORAGE_KEYS.FILE_PATH].split(/[/\\]/);
             const originalName = parts[parts.length - 1];
             const baseName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
             defaultFilename = `${baseName}.mp3`;
@@ -1847,7 +1911,7 @@ function setupAudioPlayerSynchronization() {
         if (audioPlayerNext.muted !== audioPlayer.muted) {
             audioPlayerNext.muted = audioPlayer.muted;
         }
-        localStorage.setItem(STORAGE_KEYS.VOLUME, audioPlayer.volume);
+        localStorageSetItemAndFile(STORAGE_KEYS.VOLUME, audioPlayer.volume);
     });
 
     // audioPlayerNext の音量・ミュート変更を audioPlayer に同期
@@ -1858,7 +1922,7 @@ function setupAudioPlayerSynchronization() {
         if (audioPlayer.muted !== audioPlayerNext.muted) {
             audioPlayer.muted = audioPlayerNext.muted;
         }
-        localStorage.setItem(STORAGE_KEYS.VOLUME, audioPlayerNext.volume);
+        localStorageSetItemAndFile(STORAGE_KEYS.VOLUME, audioPlayerNext.volume);
     });
 }
 
@@ -1875,5 +1939,91 @@ function showLoading(show) {
         loadingOverlay.classList.remove('hidden');
     } else {
         loadingOverlay.classList.add('hidden');
+    }
+}
+
+// ユーザーフォルダ内の設定ファイルパスを取得
+function getUserSettingsPath() {
+    // os.homedir() を使用してユーザーフォルダ直下のパスを生成
+    return window.api.path.join(window.api.os.homedir(), 'xVoiceSettings.xvj');
+}
+
+// 個別設定の変更時呼び出し用関数
+async function localStorageSetItemAndFile(key, value) {
+    // 1. メモリ保持
+    localSettings[key] = value;
+
+    // 2. 多重起動時はファイル・localStorageに書き込まない（要件遵守）
+    if (isSecondary) {
+        return;
+    }
+
+    // 3. 初回起動時のみ localStorage およびファイルへ保存
+    if (value === null || value === undefined) {
+        localStorage.removeItem(key);
+    } else {
+        const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        localStorage.setItem(key, stringValue);
+    }
+
+    await exportSettingsToFile(settingsFilePath);
+}
+
+// 設定インポート（ファイルロック対策のウェイト追加）
+async function importSettingsFromFile(targetFilePath) {
+    if (!targetFilePath) return null;
+    const maxRetries = 3;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const content = await window.api.fs.readFile(targetFilePath, 'utf8');
+            const settings = JSON.parse(content);
+
+            if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+                throw new Error('設定ファイルの形式が正しくありません');
+            }
+            return settings;
+        } catch (error) {
+            console.error(`設定インポート失敗 (${attempt}/${maxRetries}回目):`, error);
+            if (attempt < maxRetries) {
+                // 再試行前に少し待機 (ウェイト)
+                await new Promise(resolve => setTimeout(resolve, 150));
+            }
+        }
+    }
+    return null;
+}
+
+// 設定のエクスポート
+async function exportSettingsToFile(targetFilePath) {
+    try {
+        if (!targetFilePath || typeof targetFilePath !== 'string') return;
+
+        // localStorage の内容をオブジェクトにまとめる
+        const settings = {};
+        for (let i = 0; i < localStorage.length; i += 1) {
+            const key = localStorage.key(i);
+            if (key) {
+                const rawValue = localStorage.getItem(key);
+                if (rawValue !== null && rawValue !== undefined) {
+                    try {
+                        settings[key] = JSON.parse(rawValue);
+                    } catch {
+                        settings[key] = rawValue;
+                    }
+                }
+            }
+        }
+
+        const tempFilePath = `${targetFilePath}.tmp`;
+        const data = JSON.stringify(settings, null, 2);
+
+        // Preload経由の呼び出し前に値の存在を確認
+        if (window.api && window.api.fs) {
+            await window.api.fs.writeFile(tempFilePath, data, 'utf8');
+            await window.api.fs.rename(tempFilePath, targetFilePath);
+        }
+    } catch (error) {
+        console.error('設定エクスポート失敗:', error);
     }
 }

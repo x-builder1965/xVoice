@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.29.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.34.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -13,6 +13,7 @@ const http = require('http');
 const { exec, spawn } = require('child_process');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
+const gotTheLock = app.requestSingleInstanceLock();     // 🔧 単一インスタンスロックの取得（重複起動の判定）
 
 // AivisSpeech-Engine定義
 const ENGINE_PATH = 'C:\\Program Files\\AivisSpeech\\AivisSpeech-Engine';
@@ -23,12 +24,17 @@ const DEFAULT_AIVIS_HOST = 'http://127.0.0.1:10101';
 let mainWindow = null;
 // 本アプリ経由でエンジンを起動したかを管理するフラグ
 let isEngineSpawnedByApp = false;
+let isSecondaryInstance = false;    // 二重起動（多重起動）判定フラグ（true の場合はセカニアリインスタンスとして動作）
 
 // 🔲初期設定🔲
+// 初回起動判定
+setupFirstLaunch();
 // FFMpegオブジェクト生成
 ffmpeg.setFfmpegPath(ffmpegStatic.replace('app.asar', 'app.asar.unpacked'));
 
 // 🔲app イベント🔲
+// 初回起動判定結果返却
+registerIpcMainCheckSecondaryInstance();
 // アプリ初期処理
 registerAppWhenReady();
 // アプリ終了処理
@@ -56,6 +62,25 @@ registerIpcMainReadFileByPath();
 // テキスト保存用 IPC Main 処理ハンドラー
 registerIpcMainSaveTextFile();
 
+// 🔲初期設定🔲
+// 初回起動判定
+function setupFirstLaunch() {
+    if (!gotTheLock) {
+        // 2つ目以降の起動（重複起動）の場合
+        isSecondaryInstance = true;
+        // 重複起動時も一時的なバックグラウンド処理や設定同期のため即時quitせずフラグのみ保持するか、
+        // あるいは後続の処理で設定を同期させます。
+    } else {
+        // 初回起動（プライマリインスタンス）の場合、2つ目が起動された際のイベントをキャッチ
+        app.on('second-instance', (event, commandLine, workingDirectory) => {
+            if (mainWindow) {
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                mainWindow.focus();
+            }
+        });
+    }
+}
+
 // 🔲app イベント🔲
 // アプリ初期処理
 function registerAppWhenReady() {
@@ -82,6 +107,13 @@ function registerAppOnWindowAllClosed() {
 }
 
 // 🔲IPC ハンドラー登録🔲
+// 初回起動判定結果返却
+function registerIpcMainCheckSecondaryInstance() {
+    ipcMain.handle('check-secondary-instance', async () => {
+        return isSecondaryInstance;
+    });
+}
+
 // 起動時引数取得ハンドラー
 function registerIpcMainGetLaunchArgs() {
     ipcMain.handle('get-launch-args', async () => {
