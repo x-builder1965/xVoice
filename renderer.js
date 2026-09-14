@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.35.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.36.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ファイルパス＆テキストの取得
     const launchData = await window.api.getLaunchArgs();
     if (launchData) {
-        setupFilePathAndTextArgs();
+        setupFilePathAndTextArgs(launchData);
     } else {
         setupFilePathAndText();
     }
@@ -410,7 +410,7 @@ function setupFontSize() {
 }
 
 // 引数ファイルパスの設定
-function setupFilePathAndTextArgs() {
+function setupFilePathAndTextArgs(launchData) {
     // ★１ & ★３：起動時引数が存在する場合、localStorageからの復元をスキップして引数のデータで画面を更新
     // 引数ファイルパスの設定
     if (filePathDisplay) {
