@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.31.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.37.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -18,10 +18,26 @@
     --secondary-text: #e0e0e0;
     --status-color: #aaaaaa;
     --audio-filter: invert(1) hue-rotate(180deg);
-    /* スクロールバー用（ダークモード） */
-    --scrollbar-track: #1e1e1e;
-    --scrollbar-thumb: #868686;
-    --scrollbar-thumb-hover: #b0b0b0;
+    
+    /* スクロールバー用 */
+    --scrollbar-track: #121212;
+    --scrollbar-thumb: #999999;
+    --scrollbar-thumb-hover: #777777;
+
+    /* ヘルプ・変更履歴用の変数追加 */
+    --heading-color: #aaccff;
+    --heading-shadow: rgba(0, 212, 255, 0.5);
+    --close-btn-bg: rgba(0, 0, 0, 0.5);
+    --close-btn-text: #ff6b6b;
+    --close-btn-border: #555555;
+    --close-btn-hover-bg: rgba(255, 107, 107, 0.3);
+    --close-btn-shadow: rgba(0, 0, 0, 0.5);
+    --table-bg: #1a1a1a;
+    --table-hover-bg: #404040;
+    --table-shadow: rgba(0, 0, 0, 0.6);
+    --subtitle-bg: rgba(0, 102, 204, 0.514);
+    --text-muted: #aaaaaa;
+    --sub-item-text: #b0bec5;
 }
 
 [data-theme="light"] {
@@ -39,10 +55,26 @@
     --secondary-text: #ffffff;
     --status-color: #666666;
     --audio-filter: none;
-    /* スクロールバー用（ライトモード） */
+
+    /* スクロールバー用 */
     --scrollbar-track: #f1f1f1;
     --scrollbar-thumb: #747474;
     --scrollbar-thumb-hover: #575656;
+
+    /* ヘルプ・変更履歴用の変数追加（ライトモード用調整） */
+    --heading-color: #004499;
+    --heading-shadow: rgba(0, 102, 204, 0.2);
+    --close-btn-bg: rgba(255, 255, 255, 0.8);
+    --close-btn-text: #d93838;
+    --close-btn-border: #cccccc;
+    --close-btn-hover-bg: rgba(217, 56, 56, 0.15);
+    --close-btn-shadow: rgba(0, 0, 0, 0.15);
+    --table-bg: #ffffff;
+    --table-hover-bg: #f0f4f8;
+    --table-shadow: rgba(0, 0, 0, 0.1);
+    --subtitle-bg: rgba(0, 102, 204, 0.15);
+    --text-muted: #777777;
+    --sub-item-text: #546e7a;
 }
 
 /* 画面全体の全画面化 */
@@ -556,7 +588,7 @@ button, select, input {
     display: none;
 }
 
-/* ヘルプ・変更履歴用設定 */
+
 .help-container,
 .changelog-container {
     width: 100%;
@@ -566,6 +598,7 @@ button, select, input {
     padding: 1em;
     display: none;
     flex-direction: column;
+    color: var(--text-color);
 }
 .header-row {
     width: 100%;
@@ -577,8 +610,8 @@ button, select, input {
 }
 h1 {
     font-size: 1.6em;
-    color: #aaccff;
-    text-shadow: 0 0 0.8em rgba(0, 212, 255, 0.5);
+    color: var(--heading-color);
+    text-shadow: 0 0 0.8em var(--heading-shadow);
     margin: 0;
     text-align: center;
     position: relative;
@@ -590,46 +623,44 @@ h1 {
     right: 0;
     top: 50%;
     transform: translateY(-50%);
-    background: rgba(0, 0, 0, 0.5);
-    color: #ff6b6b;
-    border: 1px solid #555;
+    background: var(--close-btn-bg);
+    color: var(--close-btn-text);
+    border: 1px solid var(--close-btn-border);
     border-radius: 50%;
-    width: 2.2em;
-    height: 2.2em;
-    font-size: 1.3em;
+    width: 1.8em;
+    height: 1.8em;
+    font-size: 0.8em;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 0 0.6em rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 0.6em var(--close-btn-shadow);
     transition: all 0.2s ease;
     z-index: 1000;
 }
 #helpCloseBtn:hover,
 #changelogCloseBtn:hover {
-    background: rgba(255, 107, 107, 0.3);
+    background: var(--close-btn-hover-bg);
     transform: translateY(-50%) scale(1.1);
-    box-shadow: 0 0 1em rgba(255, 107, 107, 0.6);
+    box-shadow: 0 0 1em var(--close-btn-hover-bg);
 }
-#helpCloseBtn:active
+#helpCloseBtn:active,
 #changelogCloseBtn:active {
     transform: translateY(-50%) scale(0.95);
 }
 .help-table-container {
     width: 100%;
     margin: 0 auto;
-    border: 1px solid #333;
+    border: 1px solid var(--border-color);
     overflow: hidden;
-    box-shadow: 0 0.6em 2em rgba(0, 0, 0, 0.6);
-    background-color: #1a1a1a;
+    box-shadow: 0 0.6em 2em var(--table-shadow);
+    background-color: var(--table-bg);
     font-size: 0.9em;
     font-weight: 400;
     display: flex;
     flex-direction: column;
     flex: 1;
     max-width: none;
-}
-.help-table-container {
     height: calc(96vh - 7em);
 }
 table {
@@ -650,33 +681,37 @@ table {
     flex: 1;
     overflow-y: auto;
     display: block;
-}        
-/* スクロールバーのカスタマイズ（ダークテーマ用） */
-.body-table::-webkit-scrollbar {
+}       
+/* スクロールバーのカスタマイズ */
+.body-table::-webkit-scrollbar,
+.changelog-Content::-webkit-scrollbar {
     width: 8px;
 }
-.body-table::-webkit-scrollbar-track {
-    background: #121212;
+.body-table::-webkit-scrollbar-track,
+.changelog-Content::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
 }
-.body-table::-webkit-scrollbar-thumb {
-    background: #999;
+.body-table::-webkit-scrollbar-thumb,
+.changelog-Content::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
     border-radius: 4px;
 }
-.body-table::-webkit-scrollbar-thumb:hover {
-    background: #777;
+.body-table::-webkit-scrollbar-thumb:hover,
+.changelog-Content::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
 }
 .body-table tr:hover {
-    background-color: #404040;
+    background-color: var(--table-hover-bg);
     transition: background-color 0.3s ease;
 }
 .header-table th {
-    background-color: #0066cc;
-    color: #ffffff;
+    background-color: var(--primary-color);
+    color: var(--primary-text);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 0.5em 0.5em;
     text-align: center;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-color);
     white-space: normal;
     word-wrap: break-word;
     font-size: 0.9em;
@@ -685,11 +720,12 @@ table {
 .body-table td {
     padding: 0.5em 0.8em;
     text-align: center;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-color);
     white-space: normal;
     word-wrap: break-word;
     font-size: 0.9em;
     line-height: 1.0;
+    color: var(--text-color);
 }
 .body-table td:nth-child(1) {
     text-align: left;
@@ -704,44 +740,30 @@ table {
 }
 .sub-title {
     text-decoration: underline;
-    background-color: #0066cc83;
+    background-color: var(--subtitle-bg);
 }
 .no-data { 
-    color: #666;
+    color: var(--text-muted);
 }
 caption {
     caption-side: top;
     font-size: 1.05em;
-    color: #aaa;
+    color: var(--text-muted);
     font-weight: 100;
     text-align: center;
     padding: 0.6em;
-    background-color: #1a1a1a;
+    background-color: var(--table-bg);
     line-height: 1.3;
 }
 .icon { 
     font-size: 1.2em; 
 }
 
-/* 変更履歴のコンテナ（最初は非表示） */
+/* 変更履歴のコンテナ */
 .changelog-Content {
     overflow-y: auto;
     font-size: 1.5rem;
-}
-
-/* スクロールバーのカスタマイズ（ダークテーマ用） */
-.changelog-Content::-webkit-scrollbar {
-    width: 8px;
-}
-.changelog-Content::-webkit-scrollbar-track {
-    background: #121212;
-}
-.changelog-Content::-webkit-scrollbar-thumb {
-    background: #999;
-    border-radius: 4px;
-}
-.changelog-Content::-webkit-scrollbar-thumb:hover {
-    background: #777;
+    color: var(--text-color);
 }
 
 /* 履歴リストのスタイル */
@@ -752,27 +774,18 @@ caption {
 }
 .changelog-list li {
     margin-bottom: 8px;
-    border-bottom: 1px solid #2a3536;
+    border-bottom: 1px solid var(--border-color);
     padding-bottom: 6px;
-    white-space: pre-wrap; /* 改行やインデントを維持 */
+    white-space: pre-wrap;
 }
-/* 子要素（・付きの行）のインデントを少し下げる、または装飾用 */
 .changelog-list li.sub-item {
     padding-left: 15px;
-    color: #b0bec5;
+    color: var(--sub-item-text);
     border-bottom: none;
     padding-bottom: 2px;
     margin-bottom: 0;
 }
 .changelog-list li:hover {
-    background-color: #404040;
+    background-color: var(--table-hover-bg);
     transition: background-color 0.3s ease;
-}
-#helpCloseBtn,
-#changelogCloseBtn {
-    /* ... 既存のスタイル ... */
-    width: 1.8em;
-    height: 1.8em;
-    
-    font-size: 0.8em; /* ← ここでアイコン（❌）の大きさを調整（例: 1.0em 〜 1.5em など） */
 }
