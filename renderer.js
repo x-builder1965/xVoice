@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.34.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.35.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -25,6 +25,7 @@ const shortcutMap = {
     'ctrl+n': { control: 'btn-connect',     editing: true },
     'ctrl+r': { control: 'btn-ruby',        editing: true },
     'ctrl+u': { control: 'btn-unity',       editing: true },
+    'ctrl+g': { control: 'btn-search',      editing: true },
     'ctrl+s': { control: 'btn-save',        editing: true },
     'ctrl+p': { control: 'btn-speak',       editing: true },
     'ctrl+g': { control: 'btn-generate',    editing: true },
@@ -34,64 +35,65 @@ const audioCache = new Map();    // 音声データキャッシュ (key: lineInd
 const settingsFilePath = getUserSettingsPath(); // 設定ファイルパス取得
 
 // 🔲DOM定義🔲
-let mainContainer = null;
-let btnTheme = null;
-let speakerSelect = null;
-let btnConnect = null;      // 「🔄接続 / ❌切断」トグルボタン
-let inputAddress = null;    // 「アドレス入力」欄
-let engineProgress = null;
-let btnFileSelect = null;
-let filePathDisplay = null;
-let textInput = null;
-let fontSizeSelect = null;
-let btnFileClear = null;
-let btnRuby = null;
-let btnUnity = null;
-let btnSave = null;
-let btnSpeak = null;
-let btnGenerate = null;
-let audioPlayer = null;
-let audioPlayerNext = null;
-let statusDiv = null;
-let engineProgressBar = null;
-let textProgressContainer = null;
-let textProgressBar = null;
-let textBufferProgressBar = null;
-let mp3ProgressBar = null;
-let textElem = null;
-let writingModeSelect = null;
-let toastMessage = null;
-let loadingOverlay = null;
-let appTitle = null;
-let verTitle = null;
-let helpContainer = null;
-let helpTableContainer = null;
-let helpCloseBtn = null;
-let helpTitle = null;
-let changelogContainer = null;
-let appConfigContainer = null;
-let changelogContent = null;
-let changelogCloseBtn = null;
-let changelogTitle = null;
+let mainContainer = null;         // メインコンテンツ要素（全体のレイアウト領域）
+let btnTheme = null;             // テーマ切り替えボタン（ダーク/ライトモード）
+let speakerSelect = null;        // 話者（ボイス/キャラクター）選択ドロップダウン
+let btnConnect = null;           // 音声合成エンジン接続ボタン
+let inputAddress = null;         // エンジンサーバーアドレス入力欄
+let engineProgress = null;        // エンジン起動・接続処理の進捗表示領域
+let btnFileSelect = null;        // テキストファイル選択ボタン
+let filePathDisplay = null;      // 開いているファイルのパス表示エリア
+let textInput = null;            // 本文テキスト入力・編集エリア（textarea）
+let fontSizeSelect = null;       // テキストフォントサイズ変更ドロップダウン
+let btnFileClear = null;         // 読み込み済みファイル解除（クリア）ボタン
+let btnRuby = null;              // ルビ（読み編集 ｛漢字｜よみ｝）挿入ボタン
+let btnUnity = null;             // ルビの一括統一・整形ボタン
+let btnSearch = null;            // ルビ（読み編集）箇所検索ボタン
+let btnSave = null;              // 設定またはテキスト保存ボタン
+let btnSpeak = null;             // 音声再生 / 停止ボタン
+let btnGenerate = null;          // 音声ファイル（mp3）書き出しボタン
+let audioPlayer = null;          // メイン音声再生用 Audio 要素
+let audioPlayerNext = null;      // 次行の先行読み込み（ダブルバッファリング）用 Audio 要素
+let statusDiv = null;            // アプリケーション状態メッセージ表示エリア
+let engineProgressBar = null;    // エンジン初期化進捗バー
+let textProgressContainer = null; // テキスト読上げ進捗バーの親コンテナ
+let textProgressBar = null;      // 全体のテキスト読上げ進捗バー
+let textBufferProgressBar = null; // 音声データ生成（バッファリング）進捗バー
+let mp3ProgressBar = null;       // mp3ファイル出力進捗バー
+let textElem = null;             // 表示用・強調表示用テキストエレメント
+let writingModeSelect = null;    // 縦書き / 横書き切り替えドロップダウン
+let toastMessage = null;         // トースト通知メッセージ表示要素
+let loadingOverlay = null;       // 処理中ローディング表示用オーバーレイ
+let appTitle = null;             // アプリタイトル表示要素
+let verTitle = null;             // バージョン情報表示要素
+let helpContainer = null;        // ヘルプモーダルダイアログコンテナ
+let helpTableContainer = null;   // ヘルプ内のショートカット・説明テーブル領域
+let helpCloseBtn = null;         // ヘルプ閉じるボタン
+let helpTitle = null;            // ヘルプダイアログタイトル要素
+let changelogContainer = null;   // 更新履歴（チェンジログ）モーダルコンテナ
+let appConfigContainer = null;   // アプリ設定用モーダルコンテナ
+let changelogContent = null;     // 更新履歴本文表示領域
+let changelogCloseBtn = null;    // 更新履歴閉じるボタン
+let changelogTitle = null;       // 更新履歴ダイアログタイトル要素
 
 // 🔲localStorage復元🔲
-let localSettings = {};
+let localSettings = {};          // アプリ設定値を保持するメモリ内オブジェクト
 
 // 🔲グローバル変数定義🔲
-let isSecondary = false;
-let isPlaying = false;
-let isStopped = false;
-let isLineJumped = false;     // 再生中の行ジャンプ用フラグ
-let currentLineIndex = 0;     // 再開位置を保持する行インデックス
-let previousText = '';        // テキスト内容の変更検知用
-let textBackup = '';
-let isGenerating = false;
-let isGenerateCanceled = false;
-let isEngineReady = false;    // エンジン接続状態フラグ
-let toastTimer = null;
-let toastRemainingTime = 0;
-let toastStartTime = 0;
-let isPrefetching = false;    // ループ重複実行防止フラグ
+let isSecondary = false;         // 多重起動（セカンダリインスタンス）判定フラグ
+let isPlaying = false;           // 音声再生中フラグ
+let isStopped = false;           // 再生停止要求フラグ
+let isLineJumped = false;        // 再生中の行ジャンプ用フラグ
+let currentLineIndex = 0;        // 再開位置を保持する行インデックス
+let previousText = '';           // テキスト内容の変更検知用
+let textBackup = '';             // テキスト自動バックアップデータ
+let isGenerating = false;        // mp3ファイル生成処理中フラグ
+let isGenerateCanceled = false;  // mp3ファイル生成キャンセル要求フラグ
+let isEngineReady = false;       // エンジン接続状態フラグ
+let toastTimer = null;           // トースト表示タイマーID
+let toastRemainingTime = 0;      // トースト一時停止時の残り表示時間
+let toastStartTime = 0;          // トースト表示開始タイムスタンプ
+let isPrefetching = false;       // ループ重複実行防止フラグ
 
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲初期設定🔲
@@ -181,6 +183,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerBtnRubyClick();
     // 🔠統一編集のクリックイベント
     registerBtnUnityClick();
+    // 🔍編集検索のクリックイベント
+    registerBtnSearchClick();
     // 💾保存のクリックイベント
     registerBtnSaveClick();
     // ▶️再生／⏹️停止のクリックイベント
@@ -219,6 +223,7 @@ async function setupAllDomSettings() {
     btnFileClear = document.getElementById('btn-file-clear');
     btnRuby = document.getElementById('btn-ruby');
     btnUnity = document.getElementById('btn-unity');
+    btnSearch = document.getElementById('btn-search');
     btnSave = document.getElementById('btn-save');
     btnSpeak = document.getElementById('btn-speak');
     btnGenerate = document.getElementById('btn-generate');
@@ -960,6 +965,64 @@ function registerBtnUnityClick() {
     });
 }
 
+// 🔍編集検索のクリックイベント
+function registerBtnSearchClick() {
+    btnSearch?.addEventListener('click', (e) => {
+        if (!textInput) return;
+    
+        const text = textInput.value;
+        if (!text) {
+            showToast('読み編集が存在しません');
+            return;
+        }
+    
+        // 全角・半角のルビ記号を同一視するパターン
+        const pattern = /[｛{][^｜|\r\n]*[｜|][^｝}\r\n]*[｝}]/g;
+    
+        const matches = [];
+        let match;
+    
+        // テキスト全体からすべてのルビ表記候補を抽出
+        while ((match = pattern.exec(text)) !== null) {
+            matches.push({
+                start: match.index,
+                end: match.index + match[0].length
+            });
+        }
+    
+        // ルビ表記が存在しない場合
+        if (matches.length === 0) {
+            showToast('読み編集が存在しません');
+            return;
+        }
+    
+        // 現在のカーソル/選択範囲の終了位置を取得
+        const currentPos = textInput.selectionEnd ?? 0;
+    
+        // 現在位置より後ろにある最初のマッチを検索
+        let target = matches.find(m => m.start >= currentPos);
+    
+        // 末尾に達している場合は先頭へ戻る（周回）
+        if (!target) {
+            target = matches[0];
+        }
+    
+        // --- スクロール・ハイライト処理 ---
+    
+        // 1. ヒット位置（target.start）が「何行目か」を計算
+        const textUpToTarget = text.substring(0, target.start).replace(/\r\n/g, '\n');
+        const targetLineIndex = textUpToTarget.split('\n').length - 1;
+    
+        // 2. moveCursorToLineStart を呼び出して行位置へスクロールさせる
+        //    （第2引数を false にして関数内の全行選択ハイライトを一旦防ぐ）
+        moveCursorToLineStart(targetLineIndex, false);
+    
+        // 3. 該当の「読み編集」部分のみを正確にハイライト選択
+        textInput.focus({ preventScroll: true });
+        textInput.setSelectionRange(target.start, target.end);
+    });
+}
+
 // 💾保存のクリックイベント
 function registerBtnSaveClick() {
     btnSave?.addEventListener('click', async () => {
@@ -1117,29 +1180,25 @@ function updateConnectionUI(connected) {
     if (!btnConnect || !inputAddress) return;
 
     if (connected) {
-        btnConnect.textContent = '❌切断';
+        btnConnect.textContent = '❌';
         btnConnect.title = 'AivisSpeech Engine切断 (Ctrl+n)'; // 接続時：切断用のツールチップ
         btnConnect.disabled = false;
         inputAddress.disabled = true; // 接続時はアドレス編集不可
         
-        // 【追加】接続時は再生・一括生成ボタンを有効化
+        // 接続時は再生・一括生成ボタンを有効化
         if (btnSpeak) btnSpeak.disabled = false;
         if (btnGenerate) btnGenerate.disabled = false;
         if (speakerSelect) speakerSelect.disabled = false;
-        // if (fontSizeSelect) fontSizeSelect.disabled = false;
-        // if (writingModeSelect) writingModeSelect.disabled = false;
     } else {
-        btnConnect.textContent = '🔄接続';
+        btnConnect.textContent = '🔄';
         btnConnect.title = 'AivisSpeech Engine接続 (Ctrl+n)'; // 未接続時：接続用のツールチップ
         btnConnect.disabled = false;
         inputAddress.disabled = false; // 未接続時はアドレス編集可能
         
-        // 【追加】未接続時は各ボタンを無効化
+        // 未接続時は各ボタンを無効化
         if (btnSpeak) btnSpeak.disabled = true;
         if (btnGenerate) btnGenerate.disabled = true;
         if (speakerSelect) speakerSelect.disabled = true;
-        // if (fontSizeSelect) fontSizeSelect.disabled = true;
-        // if (writingModeSelect) writingModeSelect.disabled = true;
     }
 }
 
@@ -1261,7 +1320,7 @@ function updateButtonStates(playing) {
     isPlaying = playing;
 
     if (btnSpeak) {
-        btnSpeak.textContent = playing ? '⏹️停止' : '▶️再生';
+        btnSpeak.textContent = playing ? '⏹️' : '▶️';
         btnSpeak.title = playing ? '停止 (Ctrl+p)' : '再生 (Ctrl+p)';
         textInput.style.cursor = playing ? 'pointer' : 'text';
     }
@@ -1282,7 +1341,7 @@ function resetGenerateButton() {
     isGenerating = false;
     isGenerateCanceled = false;
     if (btnGenerate) {
-        btnGenerate.textContent = '🔊生成';
+        btnGenerate.textContent = '🔊';
         btnGenerate.title = '音声生成 (Ctrl+g)';
         btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
     }
@@ -1546,15 +1605,28 @@ async function playLineByLine() {
 }
 
 async function generateFullTextMp3() {
-    const lines = textInput.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (!textInput) return;
+
+    // 空行フィルター前の元テキストの行リスト（元の行番号計算用）
+    const allLines = textInput.value.replace(/\r\n/g, '\n').split('\n');
+
+    // 空行を除外した生成対象データ（テキストと元の行番号のペアを保持）
+    const targets = [];
+    allLines.forEach((lineText, originalLineIndex) => {
+        const trimmed = lineText.trim();
+        if (trimmed.length > 0) {
+            targets.push({ text: trimmed, originalLineIndex });
+        }
+    });
+
     const speakerId = speakerSelect.value;
 
-    if (lines.length === 0) return showToast('テキストを入力してください。', 'warning');
+    if (targets.length === 0) return showToast('テキストを入力してください。', 'warning');
 
     isGenerating = true;
     isGenerateCanceled = false;
 
-    btnGenerate.textContent = '❌中止';
+    btnGenerate.textContent = '❌';
     btnGenerate.title = '生成中止 (Ctrl+g)';
     btnGenerate.disabled = false;
     btnSpeak.disabled = true;
@@ -1572,18 +1644,23 @@ async function generateFullTextMp3() {
     try {
         const audioBuffers = [];
 
-        for (let i = 0; i < lines.length; i++) {
+        for (let i = 0; i < targets.length; i++) {
             if (isGenerateCanceled) {
                 showToast('生成処理を中止しました');
                 return;
             }
 
-            const progressPercent = Math.round(((i + 1) / lines.length) * 100);
+            const { text, originalLineIndex } = targets[i];
 
-            if (statusDiv) statusDiv.textContent = `音声生成中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
+            // 🎯 生成対象行をスクロール＆ハイライト表示 (第2引数を true に指定)
+            moveCursorToLineStart(originalLineIndex, true);
+
+            const progressPercent = Math.round(((i + 1) / targets.length) * 100);
+
+            if (statusDiv) statusDiv.textContent = `音声生成中 (${i + 1}/${targets.length} 行目 - ${progressPercent}%)`;
             if (mp3ProgressBar) mp3ProgressBar.value = progressPercent;
 
-            const buffer = await fetchAudioBuffer(lines[i], speakerId);
+            const buffer = await fetchAudioBuffer(text, speakerId);
 
             if (isGenerateCanceled) {
                 showToast('生成処理を中止しました');
@@ -1593,7 +1670,7 @@ async function generateFullTextMp3() {
             audioBuffers.push(buffer);
         }
 
-        if (statusDiv) statusDiv.textContent = 'MP3へ変換・保存中...';
+        if (statusDiv) statusDiv.textContent = '合成音声（mp3）を生成中...';
 
         let defaultFilename = 'xVoice生成.mp3';
         if (localSettings[STORAGE_KEYS.FILE_PATH]) {
