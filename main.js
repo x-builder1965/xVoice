@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.38.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.39.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -119,7 +119,7 @@ function registerIpcMainCheckSecondaryInstance() {
 // 起動時引数取得ハンドラー
 function registerIpcMainGetLaunchArgs() {
     ipcMain.handle('get-launch-args', async () => {
-        const filePath = getArgFilePath();
+        const filePath = await getArgFilePath();
         if (filePath) {
             const fileData = await readTextFile(filePath);
             if (fileData) {
@@ -373,8 +373,12 @@ async function getArgFilePath() {
     for (const arg of args) {
         // オプション引数(--等)を除く .txt ファイルパスを検索
         if (!arg.startsWith('-') && arg.toLowerCase().endsWith('.txt')) {
-            if (await fs.exists(arg)) {
+            try {
+                // 成功すると何も返さず通過、失敗すると catch へ飛ぶ
+                await fs.access(arg);
                 return path.resolve(arg);
+            } catch {
+                // ファイルが存在しない、またはアクセス権限がない場合はスキップ
             }
         }
     }
