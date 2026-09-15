@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.41.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.42.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -154,6 +154,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 🔲documentイベントリスナー登録🔲
     // ドキュメントのキーダウンイベント
     registerDocumentKeydown();
+    // 音量変更・キャッシュ量変更専用のキーダウンイベント
+    registerDocumentKeydownVolumeAndCache();
+    // 音量変更・キャッシュ量変更専用のホイールイベントリスナー
+    registerDocumentWheelVolumeAndCache();
     // クローズ専用のキーダウンイベント
     registerDocumentKeydownClose();
     // Ｄ＆Ｄのドラッグオーバーイベント
@@ -626,6 +630,108 @@ function registerDocumentKeydown() {
             }
         }
     });
+}
+
+// 音量変更・キャッシュ量変更専用のキーダウンイベント
+function registerDocumentKeydownVolumeAndCache() {
+    document.addEventListener('keydown', (event) => {
+        // 音量変更バー：Altキーが押されている場合
+        if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+            && isPlaying
+        ) {
+            if (!volumeSlider) return;
+
+            event.preventDefault(); // ページのスクロール動作等を防止
+
+            const step = Number(volumeSlider.step) || 1;
+            const min = Number(volumeSlider.min);
+            const max = Number(volumeSlider.max);
+            let currentValue = Number(volumeSlider.value);
+
+            if (event.key === 'ArrowUp') {
+                currentValue = Math.min(max, currentValue + step);
+            } else if (event.key === 'ArrowDown') {
+                currentValue = Math.max(min, currentValue - step);
+            }
+
+            volumeSlider.value = currentValue;
+            localStorageSetItemAndFile(STORAGE_KEYS.BASE_VOLUME, currentValue);
+            // input イベントを発火させて表示（「20%」など）や音量処理を更新
+            volumeSlider.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        // キャッシュ数変更バー：Ctrlキーが押されている場合
+        if (event.ctrlKey && event.key === 'ArrowUp' || event.key === 'ArrowDown'
+            && isPlaying
+        ) {
+            if (!cacheLimitSlider) return;
+
+            event.preventDefault(); // ページのスクロール動作等を防止
+
+            const step = Number(cacheLimitSlider.step) || 1;
+            const min = Number(cacheLimitSlider.min);
+            const max = Number(cacheLimitSlider.max);
+            let currentValue = Number(cacheLimitSlider.value);
+
+            if (event.key === 'ArrowUp') {
+                currentValue = Math.min(max, currentValue + step);
+            } else if (event.key === 'ArrowDown') {
+                currentValue = Math.max(min, currentValue - step);
+            }
+
+            cacheLimitSlider.value = currentValue;
+            localStorageSetItemAndFile(STORAGE_KEYS.CACHE_LIMIT, currentValue);
+            // input イベントを発火させて表示や処理を更新
+            cacheLimitSlider.dispatchEvent(new Event('input', { bubbles: true }));
+        } 
+    });
+}
+
+// documentのホイールイベントリスナー
+function registerDocumentWheelVolumeAndCache() {
+    document.addEventListener('wheel', (event) => {
+        // 音量変更バー：再生中 かつ Altキー押下時
+        if (event.altKey && isPlaying) {
+            event.preventDefault(); // ページのスクロールを防止
+    
+            const step = Number(volumeSlider.step) || 1;
+            const min = Number(volumeSlider.min);
+            const max = Number(volumeSlider.max);
+            let currentValue = Number(volumeSlider.value);
+    
+            // deltaY < 0 は上ホイール（音量アップ）、deltaY > 0 は下ホイール（音量ダウン）
+            if (event.deltaY < 0) {
+                currentValue = Math.min(max, currentValue + step);
+            } else if (event.deltaY > 0) {
+                currentValue = Math.max(min, currentValue - step);
+            }
+    
+            volumeSlider.value = currentValue;
+            localStorageSetItemAndFile(STORAGE_KEYS.BASE_VOLUME, currentValue);
+            volumeSlider.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        
+        // キャッシュ数変更バー；再生中 かつ Ctrlキー押下時
+        if (event.ctrlKey && isPlaying) {
+            event.preventDefault(); // ページのスクロールを防止
+    
+            const step = Number(cacheLimitSlider.step) || 1;
+            const min = Number(cacheLimitSlider.min);
+            const max = Number(cacheLimitSlider.max);
+            let currentValue = Number(cacheLimitSlider.value);
+    
+            // deltaY < 0 は上ホイール（キャッシュアップ）、deltaY > 0 は下ホイール（キャッシュダウン）
+            if (event.deltaY < 0) {
+                currentValue = Math.min(max, currentValue + step);
+            } else if (event.deltaY > 0) {
+                currentValue = Math.max(min, currentValue - step);
+            }
+    
+            cacheLimitSlider.value = currentValue;
+            localStorageSetItemAndFile(STORAGE_KEYS.CACHE_LIMIT, currentValue);
+            cacheLimitSlider.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }, { passive: false });
 }
 
 // クローズ専用のキーダウンイベント
