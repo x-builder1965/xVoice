@@ -1,13 +1,13 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.34.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.38.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs').promises;
 const os = require('os');
 const http = require('http');
 const { exec, spawn } = require('child_process');
@@ -61,6 +61,8 @@ registerIpcMainSelectFile();
 registerIpcMainReadFileByPath();
 // テキスト保存用 IPC Main 処理ハンドラー
 registerIpcMainSaveTextFile();
+// 設定ファイル保存用 IPC Main 処理ハンドラー
+registerIpcMainSaveSettingsFile();
 
 // 🔲初期設定🔲
 // 初回起動判定
@@ -119,7 +121,7 @@ function registerIpcMainGetLaunchArgs() {
     ipcMain.handle('get-launch-args', async () => {
         const filePath = getArgFilePath();
         if (filePath) {
-            const fileData = readTextFile(filePath);
+            const fileData = await readTextFile(filePath);
             if (fileData) {
                 return {
                     filePath: fileData.path,
@@ -213,7 +215,7 @@ function registerIpcMainGenerateAudio() {
             combinedBuffer.writeUInt32LE(combinedBuffer.length - 8, 4);
             combinedBuffer.writeUInt32LE(totalDataSize, 40);
 
-            fs.writeFileSync(tempWavPath, combinedBuffer);
+            await fs.writeFile(tempWavPath, combinedBuffer);
 
             await new Promise((resolve, reject) => {
                 ffmpeg(tempWavPath)
@@ -229,8 +231,8 @@ function registerIpcMainGenerateAudio() {
             console.error('MP3 Generate Error:', err);
             return false;
         } finally {
-            if (fs.existsSync(tempWavPath)) {
-                fs.unlinkSync(tempWavPath);
+            if (await fs.exists(tempWavPath)) {
+                await fs.unlink(tempWavPath);
             }
         }
     });
@@ -286,11 +288,23 @@ function registerIpcMainSaveTextFile() {
         }
 
         try {
-            fs.writeFileSync(filePath, textContent, 'utf-8');
+            await fs.writeFile(filePath, textContent, 'utf-8');
             return { success: true, filePath };
         } catch (error) {
             return { success: false, error: error.message };
         }
+    });
+}
+
+// 設定ファイル保存用 IPC Main 処理ハンドラー
+function registerIpcMainSaveSettingsFile() {
+    ipcMain.handle('save-settings-file', async (event, targetFilePath, data) => {
+        const tempFilePath = `${targetFilePath}`;
+        
+        // アトミック書き込み（書き込み完了を確実に待ってからリネーム）
+        await fs.writeFile(tempFilePath, data, 'utf8');
+        await fs.rename(tempFilePath, targetFilePath);
+        return true;
     });
 }
 
@@ -353,13 +367,13 @@ function createWindow() {
 }
 
 // コマンドライン引数から .txt ファイルパスを取得
-function getArgFilePath() {
+async function getArgFilePath() {
     // 開発環境とパッケージ後で process.argv の構造が変わるため考慮
     const args = process.argv.slice(app.isPackaged ? 1 : 2);
     for (const arg of args) {
         // オプション引数(--等)を除く .txt ファイルパスを検索
         if (!arg.startsWith('-') && arg.toLowerCase().endsWith('.txt')) {
-            if (fs.existsSync(arg)) {
+            if (await fs.exists(arg)) {
                 return path.resolve(arg);
             }
         }
@@ -426,7 +440,7 @@ async function startAivisEngine(address = DEFAULT_AIVIS_HOST) {
 
     // --- (以下、既存の run.exe 起動処理) ---
     const fullExePath = path.join(ENGINE_PATH, ENGINE_EXE);
-    if (!fs.existsSync(fullExePath)) {
+    if (!await fs.exists(fullExePath)) {
         console.error('ローカル Engine 実行ファイルが見つかりません:', fullExePath);
         return false;
     }
@@ -474,9 +488,9 @@ function stopAivisEngine() {
 }
 
 // ファイル読み込みの共通処理
-function readTextFile(filePath) {
+async function readTextFile(filePath) {
     try {
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = await fs.readFile(filePath, 'utf-8');
         return { path: filePath, content: content };
     } catch (err) {
         console.error('File Read Error:', err);

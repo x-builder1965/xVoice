@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.37.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.38.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -789,3 +789,75 @@ caption {
     background-color: var(--table-hover-bg);
     transition: background-color 0.3s ease;
 }
+
+.progress-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* 各要素間の余白 */
+}
+.progress-count,
+.cache-count-display {
+    display: inline-block;
+    font-family: SFMono-Regular, Consolas, monospace; /* 等幅フォントでズレを防止 */
+    white-space: pre;       /* 等幅スペース維持（自動折り返し防止も兼ねる） */
+    user-select: none;      /* テキスト選択を防止 */
+    text-align: right;
+
+    /* 画面サイズに合わせてフォントサイズを無段階に拡大・縮小 (最小11px 〜 最大18px) */
+    font-size: clamp(11px, 1.1vw, 18px);
+}
+/* 再生位置表示 (「   0/   0行」などの桁固定表示用) */
+.progress-count {
+    /* 画面サイズに合わせて幅を拡大・縮小 (最小85px 〜 最大150px) */
+    width: clamp(85px, 9vw, 150px);
+}
+/* キャッシュ数表示 (「  0 /  1件」などの桁固定表示用) */
+.cache-count-display {
+    /* 画面サイズに合わせて幅を拡大・縮小 (最小65px 〜 最大110px) */
+    width: clamp(65px, 7vw, 110px);
+}
+
+/* キャッシュ変更バー (スライダー/固定幅) */
+.cache-limit-slider {
+    width: 80px;              /* スライダーの固定幅 */
+    height: 6px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: #e0e0e0;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+/* スライダーのつまみ部分 (Webkit系: Chrome, Safari, Edge) */
+.cache-limit-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.cache-limit-slider::-webkit-slider-thumb:hover {
+    background: #0056b3;
+    transform: scale(1.1);
+}
+
+/* スライダーのつまみ部分 (Firefox系) */
+.cache-limit-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.cache-limit-slider::-moz-range-thumb:hover {
+    background: #0056b3;
+    transform: scale(1.1);
+}    

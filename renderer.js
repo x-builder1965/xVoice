@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.36.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.38.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -15,7 +15,8 @@ const STORAGE_KEYS = {
     FONT_SIZE: 'xVoice_fontSize',
     SPEAKER: 'xVoice_speaker',
     TEXT_DIRECTION: 'xVoice_textDirection',
-    SERVER_ADDRESS: 'xVoice_serverAddress'
+    SERVER_ADDRESS: 'xVoice_serverAddress',
+    CACHE_LIMIT: 'app_cache_limit'
 };
 // ショートカットキーと各ボタンのIDのマッピング定義
 const shortcutMap = {
@@ -57,9 +58,12 @@ let audioPlayerNext = null;      // 次行の先行読み込み（ダブルバ�
 let statusDiv = null;            // アプリケーション状態メッセージ表示エリア
 let engineProgressBar = null;    // エンジン初期化進捗バー
 let textProgressContainer = null; // テキスト読上げ進捗バーの親コンテナ
+let progressCountEl = null;      // 進捗カウント表示
 let textProgressBar = null;      // 全体のテキスト読上げ進捗バー
 let textBufferProgressBar = null; // 音声データ生成（バッファリング）進捗バー
 let mp3ProgressBar = null;       // mp3ファイル出力進捗バー
+let cacheCountDisplay = null;    // キャッシュ数
+let cacheLimitSlider = null;     // キャッシュ数変更バー
 let textElem = null;             // 表示用・強調表示用テキストエレメント
 let writingModeSelect = null;    // 縦書き / 横書き切り替えドロップダウン
 let toastMessage = null;         // トースト通知メッセージ表示要素
@@ -103,7 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // DOM取得
         await setupAllDomSettings();
         // 多重起動時の localStorage 書き込み防止処理
-        setupLocalStorageProtection();
+        await setupLocalStorageProtection();
         // localStorage復元
         await setupAllLocalStorageSetting();
         // HTMLロード
@@ -118,6 +122,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupVolume();
     // 音量設定の変更イベント
     setupAudioPlayerSynchronization();
+    // キャッシュ数の復元
+    setupCacheLimit();
     // フォントサイズ選択の復元
     setupFontSize();
     // ファイルパス＆テキストの取得
@@ -127,6 +133,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         setupFilePathAndText();
     }
+    showProgressBar('text');
     // テキスト向きの復元
     setupTextDirection();
     // ☀️／🌙 テーマ設定の復元
@@ -197,6 +204,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerToastMessageMouseenter();
     // トースターのマウスリーヴイベント
     registerToastMessageMouseleave();
+    // キャッシュ数変更バーのインプットイベント
+    registerCacheLimitSliderInput();
+    // キャッシュ数変更バーの変更イベント
+    registerCacheLimitSliderChange();
 
     // 🔲コールバック処理🔲
     // エンジン起動状況のコールバック
@@ -232,9 +243,12 @@ async function setupAllDomSettings() {
     statusDiv = document.getElementById('status');
     engineProgressBar = document.getElementById('engine-progress');
     textProgressContainer = document.getElementById('text-progress-container');
+    progressCountEl = document.getElementById('progress-count');
     textProgressBar = document.getElementById('text-progress');
     textBufferProgressBar = document.getElementById('text-buffer-progress');
     mp3ProgressBar = document.getElementById('mp3-progress');
+    cacheCountDisplay = document.getElementById('cache-count-display');
+    cacheLimitSlider = document.getElementById('cache-limit-slider');
     textElem = document.getElementById('text');
     writingModeSelect = document.getElementById('writing-mode-select');
     toastMessage = document.getElementById('toast-message');
@@ -293,6 +307,7 @@ async function setupAllLocalStorageSetting() {
         localSettings[STORAGE_KEYS.TEXT_BACKUP] = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP) || '';
         localSettings[STORAGE_KEYS.TEXT_DIRECTION] = localStorage.getItem(STORAGE_KEYS.TEXT_DIRECTION) || 'horizontal-tb';
         localSettings[STORAGE_KEYS.SPEAKER] = localStorage.getItem(STORAGE_KEYS.SPEAKER);
+        localSettings[STORAGE_KEYS.CACHE_LIMIT] = localStorage.getItem(STORAGE_KEYS.CACHE_LIMIT || PREFETCH_LINES.toString());
 
         await exportSettingsToFile(settingsFilePath);
 
@@ -316,6 +331,7 @@ async function setupAllLocalStorageSetting() {
         localSettings[STORAGE_KEYS.TEXT_BACKUP] = getVal(STORAGE_KEYS.TEXT_BACKUP, localSettings[STORAGE_KEYS.TEXT_BACKUP], '');
         localSettings[STORAGE_KEYS.TEXT_DIRECTION] = getVal(STORAGE_KEYS.TEXT_DIRECTION, localSettings[STORAGE_KEYS.TEXT_DIRECTION], 'horizontal-tb');
         localSettings[STORAGE_KEYS.SPEAKER] = getVal(STORAGE_KEYS.SPEAKER, localSettings[STORAGE_KEYS.SPEAKER], null);
+        localSettings[STORAGE_KEYS.CACHE_LIMIT] = getVal(STORAGE_KEYS.CACHE_LIMIT, localSettings[STORAGE_KEYS.CACHE_LIMIT], PREFETCH_LINES.toString());
     }
 }
 
@@ -401,6 +417,21 @@ function setupVolume() {
     }
     if (audioPlayerNext) {
         audioPlayerNext.volume = localSettings[STORAGE_KEYS.VOLUME];
+    }
+}
+
+// キャッシュ数の復元
+function setupCacheLimit() {
+    if (cacheLimitSlider) {
+        const savedCacheLimit = localSettings[STORAGE_KEYS.CACHE_LIMIT];
+        if (savedCacheLimit) {
+            cacheLimitSlider.value = savedCacheLimit;
+        } else {
+            cacheLimitSlider.value = PREFETCH_LINES;
+            localStorageSetItemAndFile(STORAGE_KEYS.CACHE_LIMIT, cacheLimitSlider.value);
+        }
+        // 初期表示（実キャッシュ数を自動反映）
+        updateCacheCountUI(cacheLimitSlider.value);
     }
 }
 
@@ -1096,12 +1127,36 @@ function registerToastMessageMouseleave() {
     });
 }
 
+// キャッシュ数変更バーのインプットイベント
+function registerCacheLimitSliderInput() {
+    // 操作中 (input イベント): スライダー値の変更時も現在の実キャッシュ数を保持して更新
+    cacheLimitSlider.addEventListener('input', (e) => {
+        updateCacheCountUI(e.target.value);
+    });
+}
+
+// キャッシュ数変更バーの変更イベント
+function registerCacheLimitSliderChange() {
+// 確定時 (change イベント): localStorageへの保存とキャッシュ溢れ時の削除を実行
+    cacheLimitSlider.addEventListener('change', (e) => {
+        const newLimit = parseInt(e.target.value, 10);
+        currentCacheLimit = newLimit;
+        
+        // localStorage に保存
+        localStorageSetItemAndFile(STORAGE_KEYS.CACHE_LIMIT, newLimit);
+        
+        // キャッシュ整理の実行
+        pruneAudioCache(newLimit);
+    });
+}
+
 // 🔲コールバック処理🔲
 // エンジン起動状況のコールバック
 function registerWindowApiOnEngineProgress() {
     window.api.onEngineProgress(({ current, total, isRunning }) => {
         if (engineProgressBar) {
             showProgressBar('engine');
+            updateProgressUI(engineProgressBar, retryCount, maxRetries, '回');
 
             const percent = Math.round((current / total) * 100);
             engineProgressBar.value = percent;
@@ -1251,12 +1306,6 @@ function applyFontSize(size) {
     }
 }
 
-function showProgressBar(type) {
-    if (engineProgressBar) engineProgressBar.hidden = (type !== 'engine');
-    if (textProgressBar) textProgressBar.hidden = (type !== 'text');
-    if (mp3ProgressBar) mp3ProgressBar.hidden = (type !== 'mp3');
-}
-
 function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     localStorageSetItemAndFile('theme', theme);
@@ -1312,7 +1361,7 @@ function loadFileContent(path, content) {
     if (btnGenerate) btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
 
     clearAudioCache();
-    resetProgressBars();
+    showProgressBar('text');
     moveCursorToLineStart(0);
 }
 
@@ -1478,10 +1527,9 @@ async function playLineByLine() {
         const i = currentLineIndex;
         localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, i);
 
-        const progressPercent = Math.round(((i + 1) / lines.length) * 100);
-        if (textProgressBar) {
-            textProgressBar.value = progressPercent;
-        }
+        const currentDisplayLine = i + 1;
+        const progressPercent = Math.round((currentDisplayLine / lines.length) * 100);
+        updateProgressUI(textProgressBar, currentDisplayLine, lines.length, '行');
 
         const lineText = lines[i];
         const lineTrimmed = lineText.trim();
@@ -1880,6 +1928,7 @@ function showToast(message, type = 'info', displayTime = 6000) {
 // キャッシュおよびバッファ表示をクリアする
 function clearAudioCache() {
     audioCache.clear();
+    updateCacheCountUI(cacheLimitSlider.value); // UIのカウントを 0 に更新
     if (textBufferProgressBar) {
         const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.split('\n');
@@ -1924,10 +1973,13 @@ async function triggerPrefetch(lines, speakerId) {
             const textToFetch = lines[targetIndex].trim();
             
             if (textToFetch.length > 0 && !audioCache.has(targetIndex)) {
+                // 先読み前に上限チェックとあふれ分の削除を実行
+                pruneAudioCache(cacheLimitSlider.value - 1); // 1件追加予定のため余裕を作る
                 try {
                     const data = await fetchAudioBuffer(textToFetch, speakerId);
                     if (!isStopped && !isLineJumped) {
                         audioCache.set(targetIndex, data);
+                        updateCacheCountUI(cacheLimitSlider.value); // UIのカウントをインクリメント更新
                         updateBufferProgress(lines.length);
                     }
                 } catch (err) {
@@ -1946,6 +1998,12 @@ function showProgressBar(type) {
     if (engineProgressBar) engineProgressBar.hidden = (type !== 'engine');
     if (textProgressContainer) textProgressContainer.hidden = (type !== 'text');
     if (mp3ProgressBar) mp3ProgressBar.hidden = (type !== 'mp3');
+
+    if (type === 'text') {
+        const fullText = textInput.value.replace(/\r\n/g, '\n');
+        const lines = fullText.length > 0 ? fullText.split('\n') : [];
+        updateProgressUI(textProgressBar, 0, lines.length, '行');
+    }
 }
 
 // 両方のオーディオプレイヤーを停止・初期化する
@@ -2005,8 +2063,15 @@ function setupAudioPlayerSynchronization() {
 
 // 進捗バーを 0% (リセット状態) に戻す共通関数
 function resetProgressBars() {
-    if (textProgressBar) textProgressBar.value = 0;
-    if (textBufferProgressBar) textBufferProgressBar.value = 0;
+    if (textProgressBar) {
+        textProgressBar.value = 0;
+        textProgressBar.max = 100;
+    }
+    if (textBufferProgressBar) {
+        textBufferProgressBar.value = 0;
+        textBufferProgressBar.max = 100;
+    }
+    updateProgressUI(textProgressBar, 0, 0, '行');
 }
 
 // オーバーレイ表示・非表示切り替えヘルパー
@@ -2096,11 +2161,89 @@ async function exportSettingsToFile(targetFilePath) {
         const data = JSON.stringify(settings, null, 2);
 
         // Preload経由の呼び出し前に値の存在を確認
-        if (window.api && window.api.fs) {
-            await window.api.fs.writeFile(tempFilePath, data, 'utf8');
-            await window.api.fs.rename(tempFilePath, targetFilePath);
+        if (window.api && window.api.saveSettingsFile) {
+            await window.api.saveSettingsFile(tempFilePath, data, 'utf8');
         }
     } catch (error) {
         console.error('設定エクスポート失敗:', error);
+    }
+}
+
+// 数値を指定の桁数に揃え、固定幅フォーマットテキストを生成する
+// 例: formatProgress(3, 10, '行') -> " 3/10行" または "03/10行"
+function formatProgressText(current, max, unit = '') {
+    const paddedCurrent = String(current).padStart(4, ' ');
+    const paddedMax = String(max).padStart(4, ' ');
+    return `${paddedCurrent}/${paddedMax}${unit}`;
+}
+
+// プログレスバーの value / max と数値を一括更新する
+function updateProgressUI(progressBar, current, max, unit = '') {
+    if (progressBar) {
+        progressBar.value = current;
+        progressBar.max = Math.max(max, 1);
+    }
+    if (progressCountEl) {
+        progressCountEl.textContent = formatProgressText(current, max, unit);
+    }
+}
+    
+// UI表示フォーマット関数 (` 10件` の形式)
+function updateCacheCountUI(limitValue, currentCount = audioCache.size) {
+    if (!cacheCountDisplay) return;
+
+    // それぞれ 3桁のスペース埋めで桁揃え
+    const paddedCurrent = String(currentCount).padStart(3, ' ');
+    const paddedLimit = String(limitValue).padStart(3, ' ');
+
+    cacheCountDisplay.textContent = `${paddedCurrent}/${paddedLimit}件`;
+}
+
+// 設定された上限数を超過したキャッシュを古い順に削除する
+// @param {number} limit 許容する最大キャッシュ保持件数
+function pruneAudioCache(limit) {
+    if (audioCache.size <= limit) {
+        // 削除が発生しない場合でもUI表示を最新に更新
+        updateCacheCountUI(cacheLimitSlider.value);
+        return;
+    }
+
+    // 削除対象外にする重要ライン（保護対象）
+    const protectedIndices = new Set();
+    
+    // 現在再生中の行（再生処理中の場合）
+    if (typeof currentLineIndex === 'number') {
+        protectedIndices.add(currentLineIndex);
+        
+        // 直後の再生キュー行（次に再生予定の行）
+        protectedIndices.add(currentLineIndex + 1);
+    }
+
+    // キャッシュされているキー（行インデックス）を昇順（古い順）にソート
+    const sortedKeys = Array.from(audioCache.keys()).sort((a, b) => a - b);
+
+    // 削除が必要な件数
+    const excessCount = audioCache.size - limit;
+    let deletedCount = 0;
+
+    for (const key of sortedKeys) {
+        if (deletedCount >= excessCount) break;
+
+        // 現在再生中および直後キューの行はスキップして破棄を回避
+        if (protectedIndices.has(key)) {
+            continue;
+        }
+
+        // キャッシュ削除
+        audioCache.delete(key);
+        deletedCount++;
+    }
+
+    // ★ キャッシュ削除後に UI 表示を更新
+    updateCacheCountUI(cacheLimitSlider.value);
+
+    // バッファバー等のプログレス表示を更新（利用可能な場合）
+    if (typeof updateBufferProgress === 'function' && typeof lines !== 'undefined') {
+        updateBufferProgress(lines.length);
     }
 }
