@@ -741,6 +741,7 @@ function registerBtnThemeClick() {
 function registerTextInputClick() {
     textInput?.addEventListener('click', (e) => { 
         handleCursorChange();
+        showProgressBar('text');
     });
     textInput?.addEventListener('keyup', (e) => {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
@@ -2002,7 +2003,8 @@ function showProgressBar(type) {
     if (type === 'text') {
         const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.length > 0 ? fullText.split('\n') : [];
-        updateProgressUI(textProgressBar, 0, lines.length, '行');
+        const lineIndex = fullText.length > 0 ? currentLineIndex + 1 : 0;
+        updateProgressUI(textProgressBar, lineIndex, lines.length, '行');
     }
 }
 
