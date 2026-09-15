@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.38.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.41.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -816,10 +816,9 @@ caption {
     /* 画面サイズに合わせて幅を拡大・縮小 (最小65px 〜 最大110px) */
     width: clamp(65px, 7vw, 110px);
 }
-
 /* キャッシュ変更バー (スライダー/固定幅) */
 .cache-limit-slider {
-    width: 80px;              /* スライダーの固定幅 */
+    width: 100px;              /* スライダーの固定幅 */
     height: 6px;
     appearance: none;
     -webkit-appearance: none;
@@ -828,7 +827,6 @@ caption {
     outline: none;
     cursor: pointer;
 }
-
 /* スライダーのつまみ部分 (Webkit系: Chrome, Safari, Edge) */
 .cache-limit-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -840,12 +838,10 @@ caption {
     cursor: pointer;
     transition: background 0.2s, transform 0.1s;
 }
-
 .cache-limit-slider::-webkit-slider-thumb:hover {
     background: #0056b3;
     transform: scale(1.1);
 }
-
 /* スライダーのつまみ部分 (Firefox系) */
 .cache-limit-slider::-moz-range-thumb {
     width: 14px;
@@ -856,8 +852,109 @@ caption {
     cursor: pointer;
     transition: background 0.2s, transform 0.1s;
 }
-
 .cache-limit-slider::-moz-range-thumb:hover {
     background: #0056b3;
     transform: scale(1.1);
 }    
+
+/* ミュートボタン */
+.volume-mute-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: clamp(14px, 1.3vw, 20px);
+    padding: 0;
+    line-height: 1;
+    user-select: none;
+}
+/* 音量テキスト表示 (横揺れ防止のため4ch幅に固定) */
+.volume-display {
+    display: inline-block;
+    width: 4ch;
+    text-align: right;
+    font-family: SFMono-Regular, Consolas, monospace;
+    font-size: clamp(11px, 1.1vw, 18px);
+    white-space: pre;
+    user-select: none;
+}
+/* 音量バー (固定幅) */
+.volume-slider {
+    width: 100px;
+    height: 6px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: #e0e0e0;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+.volume-slider::-webkit-slider-thumb,
+.cache-limit-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+.volume-slider::-webkit-slider-thumb:hover,
+.cache-limit-slider::-webkit-slider-thumb:hover {
+    background: #0056b3;
+    transform: scale(1.1);
+}
+.volume-slider::-moz-range-thumb,
+.cache-limit-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+.volume-slider::-moz-range-thumb:hover,
+.cache-limit-slider::-moz-range-thumb:hover {
+    background: #0056b3;
+    transform: scale(1.1);
+}
+/* シークバーコンテナ (幅に応じて可変拡張) */
+.progress-container {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 100px;
+}
+/* 固定幅要素 */
+.progress-count,
+.cache-count-display {
+    display: inline-block;
+    font-family: SFMono-Regular, Consolas, monospace;
+    white-space: pre;
+    user-select: none;
+    text-align: right;
+    font-size: clamp(11px, 1.1vw, 18px);
+}
+.progress-count {
+    width: clamp(85px, 9vw, 150px);
+}
+.cache-count-display {
+    width: clamp(65px, 7vw, 110px);
+}
+.cache-limit-slider {
+    width: 80px;
+    height: 6px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: #e0e0e0;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+.copyright-container {
+    display: flex;
+    justify-content: space-between; /* 子要素を両端（左端と右端）に配置 */
+    align-items: center;            /* 上下の縦中央揃え */
+    width: 100%;                     /* 親要素の幅を画面（または親要素）いっぱいに広げる */
+}

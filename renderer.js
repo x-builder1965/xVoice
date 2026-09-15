@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.40.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.41.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -16,7 +16,9 @@ const STORAGE_KEYS = {
     SPEAKER: 'xVoice_speaker',
     TEXT_DIRECTION: 'xVoice_textDirection',
     SERVER_ADDRESS: 'xVoice_serverAddress',
-    CACHE_LIMIT: 'app_cache_limit'
+    CACHE_LIMIT: 'app_cache_limit',
+    BASE_VOLUME: 'xVoice_baseVolume',
+    IS_MUTED: 'xVoice_isMuted'
 };
 // ショートカットキーと各ボタンのIDのマッピング定義
 const shortcutMap = {
@@ -30,6 +32,7 @@ const shortcutMap = {
     'ctrl+s': { control: 'btn-save',        editing: true },
     'ctrl+p': { control: 'btn-speak',       editing: true },
     'ctrl+g': { control: 'btn-generate',    editing: true },
+    'ctrl+m': { control: 'volume-mute-btn', editing: true },
 };
 const PREFETCH_LINES = 10;       // 常に何行先までキャッシュ（先読み）を維持するか
 const audioCache = new Map();    // 音声データキャッシュ (key: lineIndex, value: audioData)
@@ -56,6 +59,9 @@ let btnGenerate = null;          // 音声ファイル（mp3）書き出しボ�
 let audioPlayer = null;          // メイン音声再生用 Audio 要素
 let audioPlayerNext = null;      // 次行の先行読み込み（ダブルバッファリング）用 Audio 要素
 let statusDiv = null;            // アプリケーション状態メッセージ表示エリア
+let volumeMuteBtn = null;        // 音量ミュート
+let volumeDisplay = null;        // 音量表示
+let volumeSlider = null;         // 音量バー
 let engineProgressBar = null;    // エンジン初期化進捗バー
 let textProgressContainer = null; // テキスト読上げ進捗バーの親コンテナ
 let progressCountEl = null;      // 進捗カウント表示
@@ -70,6 +76,8 @@ let toastMessage = null;         // トースト通知メッセージ表示要�
 let loadingOverlay = null;       // 処理中ローディング表示用オーバーレイ
 let appTitle = null;             // アプリタイトル表示要素
 let verTitle = null;             // バージョン情報表示要素
+let copyrightText = null;        // copyright情報表示要素
+let emailText = null;            // email情報表示要素
 let helpContainer = null;        // ヘルプモーダルダイアログコンテナ
 let helpTableContainer = null;   // ヘルプ内のショートカット・説明テーブル領域
 let helpCloseBtn = null;         // ヘルプ閉じるボタン
@@ -198,6 +206,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerBtnSpeakClick();
     // 🔊生成／❌中止のクリックイベント
     registerBtnGenerateClick();
+    // 🔊／🔇音量バーの変更イベント
+    registerVolumeMuteBtnClick();
     // トースターのクリックイベント
     registerToastMessageClick();
     // トースターのマウスエンターイベント
@@ -241,6 +251,9 @@ async function setupAllDomSettings() {
     audioPlayer = document.getElementById('audio-player');
     audioPlayerNext = document.getElementById('audio-player-next');
     statusDiv = document.getElementById('status');
+    volumeMuteBtn = document.getElementById('volume-mute-btn');
+    volumeDisplay = document.getElementById('volume-display');
+    volumeSlider = document.getElementById('volume-slider');
     engineProgressBar = document.getElementById('engine-progress');
     textProgressContainer = document.getElementById('text-progress-container');
     progressCountEl = document.getElementById('progress-count');
@@ -255,6 +268,8 @@ async function setupAllDomSettings() {
     loadingOverlay = document.getElementById('loading-overlay');
     appTitle = document.querySelector('.app-title');
     verTitle = document.querySelector('.ver-title');
+    copyrightText = document.querySelector('.copyright-text');
+    emailText = document.querySelector('.email-text');
     helpContainer = document.querySelector('.help-container');
     helpTableContainer = document.getElementById('helpTableContainer');
     helpCloseBtn = document.getElementById('helpCloseBtn');
@@ -397,6 +412,10 @@ async function setupHTMLLoad() {
             if (changelogTitle) {
                 changelogTitle.textContent = `${appName} ${version} 変更履歴`;
             }
+
+            // dataset 経由で data-* 属性の値を取得
+            if (copyrightText) copyrightText.textContent = appConfig.dataset.copyright || '';
+            if (emailText) emailText.textContent = appConfig.dataset.email || '';
         }
     } catch (error) {
         console.error('初期化データの読み込みに失敗しました:', error);
@@ -412,12 +431,16 @@ function setupAddress() {
 
 // 音量設定の復元
 function setupVolume() {
-    if (audioPlayer) {
-        audioPlayer.volume = localSettings[STORAGE_KEYS.VOLUME];
-    }
-    if (audioPlayerNext) {
-        audioPlayerNext.volume = localSettings[STORAGE_KEYS.VOLUME];
-    }
+    // 1. localStorage から状態を読み込み
+    const savedBaseVolume = localStorage.getItem(STORAGE_KEYS.BASE_VOLUME);
+    const savedIsMuted = localStorage.getItem(STORAGE_KEYS.IS_MUTED);
+
+    // baseVolume が未保存なら デフォルト 0.2 (20%)
+    let baseVol = savedBaseVolume !== null ? parseFloat(savedBaseVolume) : 0.2;
+    let isMuted = savedIsMuted === 'true';
+
+    // 初期化時に反映
+    applyVolumeState(baseVol, isMuted);
 }
 
 // キャッシュ数の復元
@@ -1106,6 +1129,48 @@ function registerBtnGenerateClick() {
     });
 }
 
+// 🔊／🔇音量バーの変更イベント
+function registerVolumeMuteBtnClick() {
+    // 【1】 [🔊 / 🔇] ボタンのトグルイベント
+    volumeMuteBtn.addEventListener('click', () => {
+        const currentIsMuted = localStorage.getItem(STORAGE_KEYS.IS_MUTED) === 'true';
+        const nextIsMuted = !currentIsMuted;
+
+        if (nextIsMuted) {
+            // --- ミュート時 (isMuted = true) ---
+            // ※ baseVolume は変更・上書きせずそのまま維持
+            const baseVol = parseFloat(localStorage.getItem(STORAGE_KEYS.BASE_VOLUME) || '0.2');
+            applyVolumeState(baseVol, true);
+        } else {
+            // --- ミュート解除時 (isMuted = false) ---
+            let baseVol = parseFloat(localStorage.getItem(STORAGE_KEYS.BASE_VOLUME) || '0.2');
+            
+            // baseVolume が存在しない、または 0% の場合は 20% (0.2) を復元
+            if (isNaN(baseVol) || baseVol <= 0) {
+                baseVol = 0.2;
+                localStorageSetItemAndFile(STORAGE_KEYS.BASE_VOLUME, baseVol);
+            }
+            
+            applyVolumeState(baseVol, false);
+        }
+    });
+
+    // 【2】 音量バー (スライダー) 操作イベント (input)
+    volumeSlider.addEventListener('input', (e) => {
+        const sliderValue = parseInt(e.target.value, 10); // 0 ～ 100
+        const volumeValue = sliderValue / 100;           // 0.0 ～ 1.0
+
+        if (sliderValue === 0) {
+            // 値が 0% の場合は自動的に isMuted = true
+            applyVolumeState(0, true);
+        } else {
+            // 値が 0% より大きい場合は baseVolume を保存して isMuted = false
+            localStorageSetItemAndFile(STORAGE_KEYS.BASE_VOLUME, volumeValue);
+            applyVolumeState(volumeValue, false);
+        }
+    });
+}
+
 // トースターのクリックイベント
 function registerToastMessageClick() {
     toastMessage?.addEventListener('click', hideToast);
@@ -1528,8 +1593,6 @@ async function playLineByLine() {
     const players = [audioPlayer, audioPlayerNext];
     let activePlayerIndex = 0;
 
-    updatePlayerVisibility(activePlayerIndex);
-
     while (currentLineIndex < lines.length) {
         if (isStopped) break;
 
@@ -1583,8 +1646,6 @@ async function playLineByLine() {
                 }
 
                 const currentPlayer = players[activePlayerIndex];
-                updatePlayerVisibility(activePlayerIndex);
-
                 const blob = new Blob([audioData], { type: 'audio/wav' });
                 const blobUrl = URL.createObjectURL(blob);
 
@@ -1652,9 +1713,8 @@ async function playLineByLine() {
         currentLineIndex = 0;
         localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, 0);
         showToast('再生完了');
-        if (textProgressBar) textProgressBar.value = 100;
-        if (textBufferProgressBar) textBufferProgressBar.value = 100;
-
+        if (textBufferProgressBar) textBufferProgressBar.value = 0;
+        showProgressBar('text')
         moveCursorToLineStart(0, true);
     }
 
@@ -2026,48 +2086,22 @@ function stopAllAudioPlayers() {
         audioPlayerNext.pause();
         audioPlayerNext.currentTime = 0;
     }
-    // 表示を標準プレイヤー(0)に戻す
-    updatePlayerVisibility(0);
-}
-
-// アクティブなプレイヤーのみ画面に表示し、もう一方を非表示にする
-// @param {number} activeIndex 0: audioPlayer, 1: audioPlayerNext
-function updatePlayerVisibility(activeIndex) {
-    if (!audioPlayer || !audioPlayerNext) return;
-
-    if (activeIndex === 0) {
-        audioPlayerNext.classList.add('hidden-player');
-        audioPlayer.classList.remove('hidden-player');
-    } else {
-        audioPlayer.classList.add('hidden-player');
-        audioPlayerNext.classList.remove('hidden-player');
-    }
 }
 
 // 2つのプレイヤー間で音量とミュート状態を同期する設定
 function setupAudioPlayerSynchronization() {
     if (!audioPlayer || !audioPlayerNext) return;
 
-    // audioPlayer の音量・ミュート変更を audioPlayerNext に同期
     audioPlayer.addEventListener('volumechange', () => {
         if (audioPlayerNext.volume !== audioPlayer.volume) {
             audioPlayerNext.volume = audioPlayer.volume;
         }
-        if (audioPlayerNext.muted !== audioPlayer.muted) {
-            audioPlayerNext.muted = audioPlayer.muted;
-        }
-        localStorageSetItemAndFile(STORAGE_KEYS.VOLUME, audioPlayer.volume);
     });
 
-    // audioPlayerNext の音量・ミュート変更を audioPlayer に同期
     audioPlayerNext.addEventListener('volumechange', () => {
         if (audioPlayer.volume !== audioPlayerNext.volume) {
             audioPlayer.volume = audioPlayerNext.volume;
         }
-        if (audioPlayer.muted !== audioPlayerNext.muted) {
-            audioPlayer.muted = audioPlayerNext.muted;
-        }
-        localStorageSetItemAndFile(STORAGE_KEYS.VOLUME, audioPlayerNext.volume);
     });
 }
 
@@ -2256,4 +2290,23 @@ function pruneAudioCache(limit) {
     if (typeof updateBufferProgress === 'function' && typeof lines !== 'undefined') {
         updateBufferProgress(lines.length);
     }
+}
+
+// 音量状態のUIおよび各プレイヤーへの適用処理
+function applyVolumeState(baseVol, isMuted) {
+    const activeVolume = isMuted ? 0 : baseVol;
+
+    // プレイヤーへの反映 (0.0 ～ 1.0)
+    if (audioPlayer) audioPlayer.volume = activeVolume;
+    if (audioPlayerNext) audioPlayerNext.volume = activeVolume;
+
+    // UI表示の更新
+    const percentStr = `${Math.round(activeVolume * 100)}%`.padStart(4, ' ');
+    volumeDisplay.textContent = percentStr;
+    volumeSlider.value = Math.round(activeVolume * 100);
+    volumeMuteBtn.textContent = isMuted ? '🔇' : '🔊';
+    volumeMuteBtn.title = isMuted ? 'ミュート解除 (Ctrl+m)' : 'ミュート設定 (Ctrl+m)';
+
+    // 状態の保存
+    localStorageSetItemAndFile(STORAGE_KEYS.IS_MUTED, isMuted);
 }
