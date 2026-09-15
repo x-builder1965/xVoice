@@ -1,7 +1,7 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.38.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.40.0';
  --------------------------------------------------------------------- -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -75,14 +75,16 @@
             <!-- ステータス・プログレスバー部分 -->
             <div class="field">
                 <div class="progress-wrapper">
+                    <!-- 進捗表示・シークバー群 -->
                     <span id="progress-count" class="progress-count">    0/   0行</span>
                     <progress id="engine-progress" value="0" max="100" class="engine-progress" hidden></progress>
-                    <div id="text-progress-container" class="progress-container" hidden>
+                    <div id="text-progress-container" class="progress-container">
                         <progress id="text-buffer-progress" value="0" max="100" class="text-buffer-progress"></progress>
                         <progress id="text-progress" value="0" max="100" class="text-progress"></progress>
                     </div>
                     <progress id="mp3-progress" value="0" max="100" class="mp3-progress" hidden></progress>
-                    <span id="cache-count-display" class="cache-count-display">  0/  1件</span>
+                    <!-- キャッシュ表示群 -->
+                    <span id="cache-count-display" class="cache-count-display">  0/  0件</span>
                     <input type="range" id="cache-limit-slider" min="1" max="100" value="10" class="cache-limit-slider">
                 </div>
             </div>

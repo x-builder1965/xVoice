@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.38.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.40.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -646,11 +646,19 @@ function registerDocumentDrop() {
 
         if (isPlaying) return;
 
-        const files = e.dataTransfer?.files;
+        let files = e.dataTransfer?.files;
         if (!files || files.length === 0) return;
 
         const droppedFile = files[0];
         const filePath = droppedFile.path || (window.api.getFilePath ? window.api.getFilePath(droppedFile) : '');
+
+        // --- 【追加】Chromium 側の DataTransfer 情報を削除してファイルを解放 ---
+        if (e.dataTransfer && typeof e.dataTransfer.clearData === 'function') {
+            e.dataTransfer.clearData();
+        }
+        // FileList 参照の破棄
+        files = null;
+        // -------------------------------------------------------------------
 
         if (filePath) {
             try {
