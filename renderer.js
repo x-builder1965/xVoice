@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.43.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.44.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -28,7 +28,7 @@ const shortcutMap = {
     'ctrl+n': { control: 'btn-connect',     editing: true },
     'ctrl+r': { control: 'btn-ruby',        editing: true },
     'ctrl+u': { control: 'btn-unity',       editing: true },
-    'ctrl+g': { control: 'btn-search',      editing: true },
+    'ctrl+v': { control: 'btn-search',      editing: true },
     'ctrl+s': { control: 'btn-save',        editing: true },
     'ctrl+p': { control: 'btn-speak',       editing: true },
     'ctrl+g': { control: 'btn-generate',    editing: true },
