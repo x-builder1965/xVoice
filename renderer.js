@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.44.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.45.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -22,18 +22,26 @@ const STORAGE_KEYS = {
 };
 // ショートカットキーと各ボタンのIDのマッピング定義
 const shortcutMap = {
-    'ctrl+t': { control: 'btn-theme',       editing: true },
-    'ctrl+f': { control: 'btn-file-select', editing: true },
-    'ctrl+c': { control: 'btn-file-clear',  editing: false },
-    'ctrl+n': { control: 'btn-connect',     editing: true },
-    'ctrl+r': { control: 'btn-ruby',        editing: true },
-    'ctrl+u': { control: 'btn-unity',       editing: true },
-    'ctrl+v': { control: 'btn-search',      editing: true },
-    'ctrl+s': { control: 'btn-save',        editing: true },
-    'ctrl+p': { control: 'btn-speak',       editing: true },
-    'ctrl+g': { control: 'btn-generate',    editing: true },
-    'ctrl+m': { control: 'volume-mute-btn', editing: true },
+    'ctrl+t': { control: 'btn-theme' },
+    'ctrl+f': { control: 'btn-file-select' },
+    'ctrl+c': { control: 'btn-file-clear' },
+    'ctrl+n': { control: 'btn-connect' },
+    'ctrl+r': { control: 'btn-ruby' },
+    'ctrl+u': { control: 'btn-unity' },
+    'ctrl+v': { control: 'btn-search' },
+    'ctrl+s': { control: 'btn-save' },
+    'ctrl+p': { control: 'btn-speak' },
+    'ctrl+g': { control: 'btn-generate' },
+    'ctrl+m': { control: 'volume-mute-btn' },
 };
+// 編集中無効にするショートカットキー定義
+const disableKeyMap = new Set([
+    'ctrl+c',
+    'ctrl+x',
+    'ctrl+v',
+    'ctrl+z',
+    'ctrl+y',
+]);
 const PREFETCH_LINES = 10;       // 常に何行先までキャッシュ（先読み）を維持するか
 const audioCache = new Map();    // 音声データキャッシュ (key: lineIndex, value: audioData)
 const settingsFilePath = getUserSettingsPath(); // 設定ファイルパス取得
@@ -606,25 +614,25 @@ function registerDocumentKeydown() {
         // 'ctrl+s' のような文字列を生成
         const shortcutKey = modifiers.join('+');
     
+        // textInput（あるいは入力エリア全般）のフォーカス判定
+        const activeEl = document.activeElement;
+        const isEditing = activeEl && (
+            activeEl.id === 'textInput' || 
+            activeEl.tagName === 'INPUT' || 
+            activeEl.tagName === 'TEXTAREA' || 
+            activeEl.isContentEditable
+        );
+
+        // 編集中かつ無効化対象のショートカットキーの場合は処理をスキップ
+        if (isEditing && disableKeyMap.has(shortcutKey)) {
+            return;
+        }
+
         // マッピングの取得
         const shortcutConfig = shortcutMap[shortcutKey];
     
         // マッピングが存在するか確認
         if (shortcutConfig) {
-            // textInput（あるいは入力エリア全般）のフォーカス判定
-            const activeEl = document.activeElement;
-            const isEditing = activeEl && (
-                activeEl.id === 'textInput' || 
-                activeEl.tagName === 'INPUT' || 
-                activeEl.tagName === 'TEXTAREA' || 
-                activeEl.isContentEditable
-            );
-    
-            // 「フォーカス中かつ editing: false」の場合はショートカットを無効化（処理しない）
-            if (isEditing && !shortcutConfig.editing) {
-                return;
-            }
-    
             // コントロール名（ボタンID）の取得と実行
             const btn = document.getElementById(shortcutConfig.control);
             if (btn) {
