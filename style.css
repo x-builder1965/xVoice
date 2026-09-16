@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.41.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.43.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -553,10 +553,16 @@ button, select, input {
 }
 
 /* 保存ボタンの変更を表示 */
-#btn-save.change-active {
+.connect-active,
+.change-active,
+.play-active,
+.generate-active {
     background: #e63946 !important;     /* 赤系：有効 */
 }
-#btn-save.change-active:hover {
+.connect-active:hover,
+.change-active:hover,
+.play-active:hover,
+.generate-active:hover {
     background: #e6394785 !important;   /* 赤系：有効 */
 }
 
@@ -858,7 +864,8 @@ caption {
 }    
 
 /* ミュートボタン */
-.volume-mute-btn {
+.volume-mute-btn,
+.cache-btn {
     background: none;
     border: none;
     cursor: pointer;

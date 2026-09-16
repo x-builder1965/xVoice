@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.39.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.43.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -231,8 +231,13 @@ function registerIpcMainGenerateAudio() {
             console.error('MP3 Generate Error:', err);
             return false;
         } finally {
-            if (await fs.exists(tempWavPath)) {
+            try {
                 await fs.unlink(tempWavPath);
+            } catch (error) {
+                // ENOENT (ファイルが存在しない) 以外のエラーであれば再スロー
+                if (error.code !== 'ENOENT') {
+                    throw error;
+                }
             }
         }
     });
@@ -436,15 +441,16 @@ async function startAivisEngine(address = DEFAULT_AIVIS_HOST) {
     if (isProcessRunning && isHttpHealthy) {
         if (mainWindow) {
             const progressData = { current: 60, total: 60, isRunning: true };
-            mainWindow.webContents.send('engine-progress-update', progressData);
             mainWindow.webContents.send('engine-progress', progressData);
         }
         return true;
     }
 
     // --- (以下、既存の run.exe 起動処理) ---
-    const fullExePath = path.join(ENGINE_PATH, ENGINE_EXE);
-    if (!await fs.exists(fullExePath)) {
+    try {
+        const fullExePath = path.join(ENGINE_PATH, ENGINE_EXE);
+        await fs.access(fullExePath);
+    } catch (error) {
         console.error('ローカル Engine 実行ファイルが見つかりません:', fullExePath);
         return false;
     }
@@ -465,14 +471,12 @@ async function startAivisEngine(address = DEFAULT_AIVIS_HOST) {
 
         if (mainWindow && !mainWindow.isDestroyed()) {
             const progressData = { current: i, total: maxTries, isRunning: false };
-            mainWindow.webContents.send('engine-progress-update', progressData);
             mainWindow.webContents.send('engine-progress', progressData);
         }
 
         if (await checkEngineHealth(address)) {
             if (mainWindow && !mainWindow.isDestroyed()) {
                 const completeData = { current: maxTries, total: maxTries, isRunning: true };
-                mainWindow.webContents.send('engine-progress-update', completeData);
                 mainWindow.webContents.send('engine-progress', completeData);
             }
             return true;

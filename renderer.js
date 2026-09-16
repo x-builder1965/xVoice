@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.42.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.43.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -39,12 +39,12 @@ const audioCache = new Map();    // 音声データキャッシュ (key: lineInd
 const settingsFilePath = getUserSettingsPath(); // 設定ファイルパス取得
 
 // 🔲DOM定義🔲
-let mainContainer = null;         // メインコンテンツ要素（全体のレイアウト領域）
+let mainContainer = null;        // メインコンテンツ要素（全体のレイアウト領域）
 let btnTheme = null;             // テーマ切り替えボタン（ダーク/ライトモード）
 let speakerSelect = null;        // 話者（ボイス/キャラクター）選択ドロップダウン
 let btnConnect = null;           // 音声合成エンジン接続ボタン
 let inputAddress = null;         // エンジンサーバーアドレス入力欄
-let engineProgress = null;        // エンジン起動・接続処理の進捗表示領域
+let engineProgress = null;       // エンジン起動・接続処理の進捗表示領域
 let btnFileSelect = null;        // テキストファイル選択ボタン
 let filePathDisplay = null;      // 開いているファイルのパス表示エリア
 let textInput = null;            // 本文テキスト入力・編集エリア（textarea）
@@ -124,6 +124,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error('初期化エラー:', err);
     }
 
+    // 進捗バー非表示
+    showProgressBar('none');
     // アドレスの復元
     setupAddress();
     // 音量設定の復元
@@ -141,7 +143,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         setupFilePathAndText();
     }
-    showProgressBar('text');
     // テキスト向きの復元
     setupTextDirection();
     // ☀️／🌙 テーマ設定の復元
@@ -194,7 +195,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerBtnFileClearClick();
     // テキストの入力イベント
     registerTextInputInput();
-    // 🔄接続／❌切断のクリックイベント
+    // 🔄接続／切断のクリックイベント
     registerBtnConnectClick();
     // 話者リストの変更イベント
     registerSpeakerSelectChange();
@@ -208,7 +209,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerBtnSaveClick();
     // ▶️再生／⏹️停止のクリックイベント
     registerBtnSpeakClick();
-    // 🔊生成／❌中止のクリックイベント
+    // 🎤生成／中止のクリックイベント
     registerBtnGenerateClick();
     // 🔊／🔇音量バーの変更イベント
     registerVolumeMuteBtnClick();
@@ -230,6 +231,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 🔲初期設定🔲
     // エンジンの初期設定（※必ず初期処理、イベントリスナー登録の後に配置）
     await initEngine();
+    // 進捗バー初期表示
+    showProgressBar('text');
 });
 
 // 🔲初期設定関数🔲
@@ -661,7 +664,7 @@ function registerDocumentKeydownVolumeAndCache() {
         }
 
         // キャッシュ数変更バー：Ctrlキーが押されている場合
-        if (event.ctrlKey && event.key === 'ArrowUp' || event.key === 'ArrowDown'
+        if (event.ctrlKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')
             && isPlaying
         ) {
             if (!cacheLimitSlider) return;
@@ -951,7 +954,7 @@ function registerTextInputInput() {
     });
 }
 
-// 🔄接続／❌切断のクリックイベント
+// 🔄接続／切断のクリックイベント
 function registerBtnConnectClick() {
     btnConnect?.addEventListener('click', async () => {
         await handleConnectToggle();
@@ -1223,7 +1226,7 @@ function registerBtnSpeakClick() {
     });
 }
 
-// 🔊生成／❌中止のクリックイベント
+// 🎤生成／中止のクリックイベント
 function registerBtnGenerateClick() {
     btnGenerate?.addEventListener('click', () => {
         if (isGenerating) {
@@ -1336,21 +1339,14 @@ function registerWindowApiOnEngineProgress() {
     window.api.onEngineProgress(({ current, total, isRunning }) => {
         if (engineProgressBar) {
             showProgressBar('engine');
-            updateProgressUI(engineProgressBar, retryCount, maxRetries, '回');
-
-            const percent = Math.round((current / total) * 100);
-            engineProgressBar.value = percent;
 
             if (isRunning) {
                 isEngineReady = true;
                 showToast('Engine の起動が完了しました');
-                if (btnGenerate && !isGenerating) {
-                    btnGenerate.disabled = !textInput.value.trim();
-                }
-                setTimeout(() => { engineProgressBar.hidden = true; }, 1000);
+                showProgressBar('text');
             } else {
                 isEngineReady = false;
-                if (btnGenerate) btnGenerate.disabled = true;
+                updateProgressUI(engineProgressBar, current, total, '回');
                 if (statusDiv) statusDiv.textContent = `Engine 起動確認中... (${current}/${total} - ${percent}%)`;
             }
         }
@@ -1358,7 +1354,7 @@ function registerWindowApiOnEngineProgress() {
 }
 
 // 🔲共通ヘルパー関数🔲
-// 「🔄接続 / ❌切断」のトグル実行関数
+// 「🔄接続 / 切断」のトグル実行関数
 async function handleConnectToggle() {
     if (isEngineReady) {
         if (statusDiv) statusDiv.textContent = 'Engine から切断中...';
@@ -1386,8 +1382,6 @@ async function handleConnectToggle() {
         if (inputAddress) inputAddress.disabled = true;
 
         const address = getServerAddress();
-        // ★ リクエスト送信前にローディング表示
-        showLoading(true);
         const res = await window.api.connectEngine(address);
 
         if (typeof engineProgress !== 'undefined' && engineProgress) {
@@ -1405,8 +1399,6 @@ async function handleConnectToggle() {
             updateConnectionUI(false);
             showToast(res.error || '接続に失敗しました', 'error');
         }
-        // ★ レスポンス受領後（成功・失敗問わず）にローディング非表示
-        showLoading(false);
     }
 }
 
@@ -1415,8 +1407,9 @@ function updateConnectionUI(connected) {
     if (!btnConnect || !inputAddress) return;
 
     if (connected) {
-        btnConnect.textContent = '❌';
-        btnConnect.title = 'AivisSpeech Engine切断 (Ctrl+n)'; // 接続時：切断用のツールチップ
+        btnConnect.textContent = '🔄';
+        btnConnect.classList.add('connect-active');
+        btnConnect.title = 'AivisSpeech Engine切断 (Ctrl+n)';
         btnConnect.disabled = false;
         inputAddress.disabled = true; // 接続時はアドレス編集不可
         
@@ -1426,7 +1419,8 @@ function updateConnectionUI(connected) {
         if (speakerSelect) speakerSelect.disabled = false;
     } else {
         btnConnect.textContent = '🔄';
-        btnConnect.title = 'AivisSpeech Engine接続 (Ctrl+n)'; // 未接続時：接続用のツールチップ
+        btnConnect.classList.remove('connect-active');
+        btnConnect.title = 'AivisSpeech Engine接続 (Ctrl+n)';
         btnConnect.disabled = false;
         inputAddress.disabled = false; // 未接続時はアドレス編集可能
         
@@ -1549,9 +1543,17 @@ function updateButtonStates(playing) {
     isPlaying = playing;
 
     if (btnSpeak) {
-        btnSpeak.textContent = playing ? '⏹️' : '▶️';
-        btnSpeak.title = playing ? '停止 (Ctrl+p)' : '再生 (Ctrl+p)';
-        textInput.style.cursor = playing ? 'pointer' : 'text';
+        if (playing) {
+            btnSpeak.textContent = '⏹️';
+            btnSpeak.title = '停止 (Ctrl+p)';
+            btnSpeak.classList.add('play-active')
+            textInput.style.cursor = 'pointer';
+        } else {
+            btnSpeak.textContent = '▶️';
+            btnSpeak.title = '再生 (Ctrl+p)';
+            btnSpeak.classList.remove('play-active');
+            textInput.style.cursor = 'text';
+        }
     }
 
     if (btnGenerate && !isGenerating) {
@@ -1570,7 +1572,8 @@ function resetGenerateButton() {
     isGenerating = false;
     isGenerateCanceled = false;
     if (btnGenerate) {
-        btnGenerate.textContent = '🔊';
+        btnGenerate.textContent = '🎤';
+        btnGenerate.classList.remove('generate-active');
         btnGenerate.title = '音声生成 (Ctrl+g)';
         btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
     }
@@ -1849,7 +1852,8 @@ async function generateFullTextMp3() {
     isGenerating = true;
     isGenerateCanceled = false;
 
-    btnGenerate.textContent = '❌';
+    btnGenerate.textContent = '🎤';
+    btnGenerate.classList.add('generate-active');
     btnGenerate.title = '生成中止 (Ctrl+g)';
     btnGenerate.disabled = false;
     btnSpeak.disabled = true;
@@ -1870,12 +1874,13 @@ async function generateFullTextMp3() {
         for (let i = 0; i < targets.length; i++) {
             if (isGenerateCanceled) {
                 showToast('生成処理を中止しました');
+                showProgressBar('text');
                 return;
             }
 
             const { text, originalLineIndex } = targets[i];
 
-            // 🎯 生成対象行をスクロール＆ハイライト表示 (第2引数を true に指定)
+            // 生成対象行をスクロール＆ハイライト表示 (第2引数を true に指定)
             moveCursorToLineStart(originalLineIndex, true);
 
             const progressPercent = Math.round(((i + 1) / targets.length) * 100);
@@ -1887,6 +1892,7 @@ async function generateFullTextMp3() {
 
             if (isGenerateCanceled) {
                 showToast('生成処理を中止しました');
+                showProgressBar('text');
                 return;
             }
 
@@ -1905,6 +1911,7 @@ async function generateFullTextMp3() {
 
         if (isGenerateCanceled) {
             showToast('生成処理を中止しました');
+            showProgressBar('text');
             return;
         }
 
@@ -1914,8 +1921,10 @@ async function generateFullTextMp3() {
         } else {
             showToast('生成がキャンセルまたは失敗しました', 'error');
         }
+        showProgressBar('text');
     } catch (err) {
         showToast('生成エラーが発生しました', 'error');
+        showProgressBar('text');
         console.error(err);
     } finally {
         resetGenerateButton();
@@ -2174,11 +2183,16 @@ function showProgressBar(type) {
     if (textProgressContainer) textProgressContainer.hidden = (type !== 'text');
     if (mp3ProgressBar) mp3ProgressBar.hidden = (type !== 'mp3');
 
-    if (type === 'text') {
+    // 'engine'、'mp3'以外の場合は'text'を初期表示
+    if (type !== 'engine' && type !== 'mp3') {
         const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.length > 0 ? fullText.split('\n') : [];
         const lineIndex = fullText.length > 0 ? currentLineIndex + 1 : 0;
-        updateProgressUI(textProgressBar, lineIndex, lines.length, '行');
+        if (lines.length > 0) {
+            updateProgressUI(textProgressBar, lineIndex, lines.length, '行');
+        } else {
+            updateProgressUI(textProgressBar, 0, 100, '行');
+        }
     }
 }
 
