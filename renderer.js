@@ -32,7 +32,7 @@ const shortcutMap = {
     'ctrl+s': { control: 'btn-save' },
     'ctrl+p': { control: 'btn-speak' },
     'ctrl+g': { control: 'btn-generate' },
-    'ctrl+m': { control: 'volume-mute-btn' },
+    'ctrl+m': { control: 'btn-mute' },
 };
 // 編集中無効にするショートカットキー定義
 const disableKeyMap = new Set([
@@ -67,7 +67,7 @@ let btnGenerate = null;          // 音声ファイル（mp3）書き出しボ�
 let audioPlayer = null;          // メイン音声再生用 Audio 要素
 let audioPlayerNext = null;      // 次行の先行読み込み（ダブルバッファリング）用 Audio 要素
 let statusDiv = null;            // アプリケーション状態メッセージ表示エリア
-let volumeMuteBtn = null;        // 音量ミュート
+let btnMute = null;        // 音量ミュート
 let volumeDisplay = null;        // 音量表示
 let volumeSlider = null;         // 音量バー
 let engineProgressBar = null;    // エンジン初期化進捗バー
@@ -220,7 +220,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 🎤生成／中止のクリックイベント
     registerBtnGenerateClick();
     // 🔊／🔇音量バーの変更イベント
-    registerVolumeMuteBtnClick();
+    registerbtnMuteClick();
     // トースターのクリックイベント
     registerToastMessageClick();
     // トースターのマウスエンターイベント
@@ -266,7 +266,7 @@ async function setupAllDomSettings() {
     audioPlayer = document.getElementById('audio-player');
     audioPlayerNext = document.getElementById('audio-player-next');
     statusDiv = document.getElementById('status');
-    volumeMuteBtn = document.getElementById('volume-mute-btn');
+    btnMute = document.getElementById('btn-mute');
     volumeDisplay = document.getElementById('volume-display');
     volumeSlider = document.getElementById('volume-slider');
     engineProgressBar = document.getElementById('engine-progress');
@@ -1247,9 +1247,9 @@ function registerBtnGenerateClick() {
 }
 
 // 🔊／🔇音量バーの変更イベント
-function registerVolumeMuteBtnClick() {
+function registerbtnMuteClick() {
     // 【1】 [🔊 / 🔇] ボタンのトグルイベント
-    volumeMuteBtn.addEventListener('click', () => {
+    btnMute.addEventListener('click', () => {
         const currentIsMuted = localStorage.getItem(STORAGE_KEYS.IS_MUTED) === 'true';
         const nextIsMuted = !currentIsMuted;
 
@@ -2432,8 +2432,8 @@ function applyVolumeState(baseVol, isMuted) {
     const percentStr = `${Math.round(activeVolume * 100)}%`.padStart(4, ' ');
     volumeDisplay.textContent = percentStr;
     volumeSlider.value = Math.round(activeVolume * 100);
-    volumeMuteBtn.textContent = isMuted ? '🔇' : '🔊';
-    volumeMuteBtn.title = isMuted ? 'ミュート解除 (Ctrl+m)' : 'ミュート設定 (Ctrl+m)';
+    btnMute.textContent = isMuted ? '🔇' : '🔊';
+    btnMute.title = isMuted ? 'ミュート解除 (Ctrl+m)' : 'ミュート設定 (Ctrl+m)';
 
     // 状態の保存
     localStorageSetItemAndFile(STORAGE_KEYS.IS_MUTED, isMuted);

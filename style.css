@@ -864,7 +864,7 @@ caption {
 }    
 
 /* ミュートボタン */
-.volume-mute-btn,
+.btn-mute,
 .cache-btn {
     background: none;
     border: none;
