@@ -1,7 +1,7 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.44.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.46.0';
  --------------------------------------------------------------------- -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -56,20 +56,31 @@
                         <option value="horizontal-tb" selected>横向き</option>
                         <option value="vertical-rl">縦向き</option>
                     </select>
-                    <button id="btn-file-select" class="btn-primary" title="ファイル選択 (Ctrl+f)">📁</button>
-                    <span id="file-path-display" class="file-path-display">選択されていません</span>
-                    <button id="btn-speak" class="btn-primary" title="再生 (Ctrl+p)">▶️</button>
+                    <button id="btn-folder-select" class="btn-primary" title="フォルダ選択 (Ctrl+d)">📁</button>
+                    <button id="btn-file-select" class="btn-primary" title="ファイル選択 (Ctrl+f)">🗒️</button>
+                    <select id="file-path-display" class="file-path-display" title="プレイリスト">
+                        <option value="">選択されていません</option>
+                    </select>
                     <button id="btn-generate" class="btn-secondary" title="音声生成 (Ctrl+g)">🎤</button>
                     <button id="btn-ruby" class="btn-primary" title="読み編集 (Ctrl+r)">🖊️</button>
                     <button id="btn-unity" class="btn-primary" title="読み統一 (Ctrl+u)">🔠</button>
                     <button id="btn-search" class="btn-primary" title="編集検索 (Ctrl+g)">🔍</button>
                     <button id="btn-save" class="btn-primary" title="テキスト保存 (Ctrl+s)">💾</button>
+                    <button id="btn-playlist-save" class="btn-primary" title="プレイリスト保存 (Ctrl+l)">📚</button>
                     <button id="btn-file-clear" class="file-select-btn" type="button" title="テキストクリア (Ctrl+c)">🗑️</button>
                 </div>
             </div>
 
+            <!-- テキスト入力エリア -->
             <div class="field field-text">
-                <textarea id="text" placeholder="テキストを入力するか、ファイルを読み込んでください..."></textarea>
+                <textarea id="text-input" placeholder="テキストを入力するか、ファイルを読み込んでください..."></textarea>
+            </div>
+
+            <!-- 再生コントロール部（新規追加） -->
+            <div class="field">
+                <div class="controls-group">
+                    <button id="btn-speak" class="btn-primary" title="再生 (Ctrl+p)">▶️</button>
+                </div>
             </div>
 
             <!-- ステータス・プログレスバー部分 -->
@@ -93,7 +104,7 @@
                     <input type="range" id="cache-limit-slider" min="1" max="100" value="10" class="cache-limit-slider">
                 </div>
             </div>
-            <div class="status" id="status">AivisSpeech Engineに接続中...</div>
+            <div class="status-display" id="status-display">AivisSpeech Engineに接続中...</div>
 
             <!-- 再生プレイヤー -->
             <audio id="audio-player" class="audio-player-element hidden-player" controls></audio>

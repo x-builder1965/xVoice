@@ -1,7 +1,7 @@
 // -- preload.js -------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.38.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.46.0';
 // ---------------------------------------------------------------------
 const { contextBridge, ipcRenderer } = require('electron');
 const os = require('os');
@@ -59,9 +59,12 @@ contextBridge.exposeInMainWorld('api', {
     connectEngine: (address) => ipcRenderer.invoke('connect-engine', address),
     disconnectEngine: () => ipcRenderer.invoke('disconnect-engine'),
     selectFile: () => ipcRenderer.invoke('select-file'),
+    selectFolder: () => ipcRenderer.invoke('select-folder'),
     readFileByPath: (filePath) => ipcRenderer.invoke('read-file-by-path', filePath),
+    processDroppedPaths: (filePaths) => ipcRenderer.invoke('process-dropped-paths', filePaths),
     saveTextFile: (text, targetPath) => ipcRenderer.invoke('save-text-file', text, targetPath),
     generateAudio: (buffers, defaultFilename) => ipcRenderer.invoke('generate-audio', buffers, defaultFilename),
     onEngineProgress: (callback) => ipcRenderer.on('engine-progress', (event, value) => callback(value)),
     saveSettingsFile: (targetFilePath, data) => ipcRenderer.invoke('save-settings-file', targetFilePath, data),
+    savePlaylistFile: (paths) => ipcRenderer.invoke('save-playlist-file', paths),
 });

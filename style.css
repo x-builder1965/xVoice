@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.44.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.46.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -87,7 +87,7 @@ html, body {
 }
 
 body {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
     background-color: var(--bg-color);
     color: var(--text-color);
     padding: 8px;
@@ -175,7 +175,8 @@ body {
     min-width: 0; /* Flexbox崩れ防止 */
 }
 
-#text {
+#text-input {
+    font-family: SFMono-Regular, Consolas, monospace;
     cursor: text;
 }
 
@@ -203,7 +204,6 @@ select, input[type="file"], input[type="text"] {
 #input-address {
     flex: 1 1 200px;
     min-width: 200px;
-    font-family: monospace, system-ui;
     font-size: 0.85rem;
 }
 
@@ -263,7 +263,7 @@ audio {
     filter: var(--audio-filter);
 }
 
-.status {
+.status-display {
     color: var(--status-color);
     font-size: 0.85em;
     min-height: 1.2em;
@@ -319,30 +319,16 @@ input[type="file"] {
     border-radius: 6px;
     font-size: 0.85rem;
     box-sizing: border-box;
-    overflow: hidden;
-    white-space: nowrap;
-    position: relative;
-}
-
-.file-path-text {
-    display: inline-block;
+    outline: none;
+    cursor: pointer;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
-
-.file-path-text.scrolling {
-    display: inline-block;
-    white-space: nowrap;
-    /* JSから渡される --marquee-duration を使用 */
-    animation: marquee-scroll var(--marquee-duration, 10s) linear infinite;
+.file-path-display option {
+    background-color: var(--input-bg);
+    color: var(--text-color);
 }
-
-/* 各テキスト要素のスタイル */
-.file-path-text .marquee-item {
-    display: inline-block;
-    padding-right: 20rem; /* 20emから固定値（例: 3remまたは50pxなど）へ変更して計算のズレを防止 */
-}
-
-.file-path-display:hover .file-path-text.scrolling {
+.file-path-display:hover {
     animation-play-state: paused;
 }
 
@@ -515,6 +501,7 @@ input[type="text"]:disabled {
 
 /* --- Electron用：ボタン上のマウス操作とホバー判定を復元 --- */
 button, select, input {
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
     -webkit-app-region: no-drag;
 }
 
@@ -804,7 +791,6 @@ caption {
 .progress-count,
 .cache-count-display {
     display: inline-block;
-    font-family: SFMono-Regular, Consolas, monospace; /* 等幅フォントでズレを防止 */
     white-space: pre;       /* 等幅スペース維持（自動折り返し防止も兼ねる） */
     user-select: none;      /* テキスト選択を防止 */
     text-align: right;
@@ -879,7 +865,6 @@ caption {
     display: inline-block;
     width: 4ch;
     text-align: right;
-    font-family: SFMono-Regular, Consolas, monospace;
     font-size: clamp(11px, 1.1vw, 18px);
     white-space: pre;
     user-select: none;
@@ -936,7 +921,6 @@ caption {
 .progress-count,
 .cache-count-display {
     display: inline-block;
-    font-family: SFMono-Regular, Consolas, monospace;
     white-space: pre;
     user-select: none;
     text-align: right;

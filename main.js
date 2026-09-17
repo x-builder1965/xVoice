@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.43.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.46.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -55,6 +55,8 @@ registerIpcMainDisconnectEngine();
 registerIpcMainRestartEngine();
 // 音声保存処理ハンドラー
 registerIpcMainGenerateAudio();
+// IPC通信: フォルダ選択ハンドラー
+registerIpcMainSelectFolder();
 // ファイル選択ダイアログを表示するIPCハンドラー
 registerIpcMainSelectFile();
 // 指定されたパスのファイルを直接読み込むIPCハンドラー
@@ -63,6 +65,10 @@ registerIpcMainReadFileByPath();
 registerIpcMainSaveTextFile();
 // 設定ファイル保存用 IPC Main 処理ハンドラー
 registerIpcMainSaveSettingsFile();
+// プレイリスト保存 IPCハンドラー
+registerIpcMainSavePlaylistFile();
+// Ｄ＆Ｄ IPCハンドラー
+registerIpcMainProcessDroppedPaths();
 
 // 🔲初期設定🔲
 // 初回起動判定
@@ -243,13 +249,32 @@ function registerIpcMainGenerateAudio() {
     });
 }
 
+// IPC通信: フォルダ選択ハンドラー
+function registerIpcMainSelectFolder() {
+    ipcMain.handle('select-folder', async () => {
+        const result = await dialog.showOpenDialog({
+            title: 'フォルダの選択',
+            properties: ['openDirectory']
+        });
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return null;
+        }
+
+        const folderPath = result.filePaths[0];
+        return await scanFolderAndCollectFiles(folderPath);
+    });
+}
+
 // ファイル選択ダイアログを表示するIPCハンドラー
 function registerIpcMainSelectFile() {
     ipcMain.handle('select-file', async () => {
         const result = await dialog.showOpenDialog({
-            properties: ['openFile'],
+            properties: ['openFile', 'multiSelections'],
             filters: [
-                { name: 'テキストファイル', extensions: ['txt'] },
+                { name: 'プレイリスト / テキストファイル', extensions: ['amppl', 'txt'] },
+                { name: 'テキストファイル (*.txt)', extensions: ['txt'] },
+                { name: 'プレイリストファイル (*.amppl)', extensions: ['amppl'] },
                 { name: 'すべてのファイル', extensions: ['*'] }
             ]
         });
@@ -258,7 +283,52 @@ function registerIpcMainSelectFile() {
             return null;
         }
 
-        return readTextFile(result.filePaths[0]);
+        const rawItemMap = new Map(); // 重複排除用マップ (Key: filePath)
+
+        for (const selectedPath of result.filePaths) {
+            const ext = path.extname(selectedPath);
+
+            if (ext.toLowerCase() === '.amppl') {
+                const itemsFromPlaylist = await parsePlaylistFile(selectedPath);
+                for (const item of itemsFromPlaylist) {
+                    if (!rawItemMap.has(item.path)) {
+                        rawItemMap.set(item.path, item);
+                    }
+                }
+            } else if (ext.toLowerCase() === '.txt') {
+                try {
+                    const stats = await fs.stat(selectedPath);
+                    const parsedPath = path.parse(selectedPath);
+
+                    if (!rawItemMap.has(selectedPath)) {
+                        rawItemMap.set(selectedPath, {
+                            path: selectedPath,
+                            file: parsedPath.name,
+                            ext: ext.replace(/^\./, ''),
+                            createTime: stats.birthtime
+                        });
+                    }
+                } catch (err) {
+                    console.error(`ファイル情報取得失敗: ${selectedPath}`, err);
+                }
+            }
+        }
+
+        // ファイル内容を読み込んで各要素オブジェクトに合体
+        const fileDataList = [];
+        for (const item of rawItemMap.values()) {
+            try {
+                const content = await fs.readFile(item.path, 'utf-8');
+                fileDataList.push({
+                    ...item,
+                    content: content
+                });
+            } catch (err) {
+                console.error(`ファイル読み込み失敗: ${item.path}`, err);
+            }
+        }
+
+        return fileDataList; // 配列で返却
     });
 }
 
@@ -310,6 +380,50 @@ function registerIpcMainSaveSettingsFile() {
         await fs.writeFile(tempFilePath, data, 'utf8');
         await fs.rename(tempFilePath, targetFilePath);
         return true;
+    });
+}
+
+// プレイリスト保存 IPCハンドラー
+function registerIpcMainSavePlaylistFile() {
+    ipcMain.handle('save-playlist-file', async (event, paths) => {
+        if (!paths || !Array.isArray(paths) || paths.length === 0) {
+            return { success: false, reason: 'empty' };
+        }
+
+        // 保存ダイアログを表示
+        const result = await dialog.showSaveDialog({
+            title: 'プレイリストファイルを保存',
+            defaultPath: 'xVoice.amppl', // デフォルトファイル名
+            filters: [
+                { name: 'プレイリストファイル', extensions: ['amppl'] },
+                { name: 'すべてのファイル', extensions: ['*'] }
+            ]
+        });
+
+        // キャンセル時は何もしない
+        if (result.canceled || !result.filePath) {
+            return { success: false, reason: 'canceled' };
+        }
+
+        try {
+            // パス一覧を改行コード (CRLFまたはLF) で結合
+            const content = paths.join('\r\n');
+            
+            // UTF-8 形式で保存
+            await fs.writeFile(result.filePath, content, 'utf-8');
+
+            return { success: true, filePath: result.filePath };
+        } catch (error) {
+            console.error('プレイリスト保存エラー:', error);
+            return { success: false, error: error.message };
+        }
+    });
+}
+
+// Ｄ＆Ｄ IPCハンドラー
+function registerIpcMainProcessDroppedPaths() {
+    ipcMain.handle('process-dropped-paths', async (event, filePaths) => {
+        return await processDroppedPaths(filePaths);
     });
 }
 
@@ -504,4 +618,187 @@ async function readTextFile(filePath) {
         console.error('File Read Error:', err);
         return null;
     }
+}
+
+// .amppl プレイリストファイルを解析してテキストファイル群を読み込む
+async function parseAmpplFile(playlistPath) {
+    try {
+        const content = await fs.promises.readFile(playlistPath, 'utf8');
+        // 改行で分割し、空行を除外
+        const lines = content.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        const loadedItems = [];
+
+        for (const linePath of lines) {
+            // .txt ファイルのみを対象とする (.mp4 等はスキップ)
+            if (path.extname(linePath).toLowerCase() === '.txt') {
+                try {
+                    const fileData = await readTextFile(linePath);
+                    if (fileData) {
+                        loadedItems.push(fileData);
+                    }
+                } catch (err) {
+                    console.warn(`[Playlist] ファイルの読み込みに失敗しました: ${linePath}`, err);
+                }
+            }
+        }
+        return loadedItems;
+    } catch (error) {
+        console.error(`[Playlist] .amppl の読み込みエラー: ${playlistPath}`, error);
+        return [];
+    }
+}
+
+// プレイリストファイル (.amppl) を解析し、存在する .txt ファイルの詳細情報一覧を取得する関数
+// @param {string} playlistPath 
+// @returns {Promise<Array<{path: string, file: string, ext: string, createTime: Date}>>}
+async function parsePlaylistFile(playlistPath) {
+    try {
+        const content = await fs.readFile(playlistPath, 'utf-8');
+        const lines = content.split(/\r?\n/);
+        const validTxtPaths = [];
+
+        for (let line of lines) {
+            const trimmedPath = line.trim();
+            if (!trimmedPath) continue;
+
+            const ext = path.extname(trimmedPath);
+
+            // .txt ファイルかつ実際に存在するかチェック（.mp4等を除外）
+            if (ext.toLowerCase() === '.txt') {
+                try {
+                    const stats = await fs.stat(trimmedPath);
+                    const parsedPath = path.parse(trimmedPath);
+
+                    validTxtPaths.push({
+                        path: trimmedPath,
+                        file: parsedPath.name,        // 拡張子なしファイル名
+                        ext: ext.replace(/^\./, ''),  // 拡張子 (先頭ドットなし)
+                        createTime: stats.birthtime   // 作成日時 (環境により stats.ctime)
+                    });
+                } catch {
+                    console.warn(`ファイルが存在しません: ${trimmedPath}`);
+                }
+            }
+        }
+        return validTxtPaths;
+    } catch (error) {
+        console.error('プレイリスト解析エラー:', error);
+        return [];
+    }
+}
+
+// ディレクトリ内を再帰的に検索してテキスト情報を取得する関数
+async function scanFolderAndCollectFiles(dirPath) {
+    let results = [];
+    
+    try {
+        const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+        for (const entry of entries) {
+            const fullPath = path.join(dirPath, entry.name);
+
+            if (entry.isDirectory()) {
+                // サブフォルダを再帰的に検索
+                const subResults = await scanFolderAndCollectFiles(fullPath);
+                results = results.concat(subResults);
+            } else if (entry.isFile()) {
+                const ext = path.extname(entry.name).toLowerCase();
+
+                if (ext === '.txt') {
+                    // .txt ファイルの読み込み
+                    try {
+                        const content = await fs.readFile(fullPath, 'utf-8');
+                        results.push({ path: fullPath, content });
+                    } catch (err) {
+                        console.warn(`ファイル読み込みエラー: ${fullPath}`, err);
+                    }
+                } else if (ext === '.amppl') {
+                    // .amppl プレイリストファイルの展開読み込み
+                    const playlistItems = await parsePlaylistFile(fullPath);
+                    for (const item of playlistItems) {
+                        try {
+                            const content = await fs.readFile(item.path, 'utf-8');
+                            results.push({ path: item.path, content });
+                        } catch (err) {
+                            console.warn(`プレイリスト内テキスト読み込みエラー: ${item.path}`, err);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error(`フォルダスキャンエラー: ${dirPath}`, error);
+    }
+
+    // 重複パスの排除（同一テキストが複数回登録されるのを防止）
+    const uniqueMap = new Map();
+    for (const item of results) {
+        if (!uniqueMap.has(item.path)) {
+            uniqueMap.set(item.path, item);
+        }
+    }
+
+    return Array.from(uniqueMap.values());
+}
+
+// ドロップされたパス一覧を処理するメイン関数
+async function processDroppedPaths(filePaths) {
+    let results = [];
+
+    for (const targetPath of filePaths) {
+        try {
+            const stats = await fs.stat(targetPath);
+
+            if (stats.isDirectory()) {
+                // フォルダの場合は再帰スキャン
+                const subResults = await scanFolderAndCollectFiles(targetPath);
+                results = results.concat(subResults);
+            } else if (stats.isFile()) {
+                // ファイルの場合は単体処理
+                const fileResult = await processSingleFile(targetPath);
+                if (fileResult) {
+                    results = results.concat(fileResult);
+                }
+            }
+        } catch (err) {
+            console.warn(`パス処理エラー: ${targetPath}`, err);
+        }
+    }
+
+    // 重複パスの排除
+    const uniqueMap = new Map();
+    for (const item of results) {
+        if (!uniqueMap.has(item.path)) {
+            uniqueMap.set(item.path, item);
+        }
+    }
+
+    return Array.from(uniqueMap.values());
+}
+
+// 単一ファイル（.txt / .amppl）の処理
+async function processSingleFile(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+
+    if (ext === '.txt') {
+        try {
+            const content = await fs.readFile(filePath, 'utf-8');
+            return [{ path: filePath, content }];
+        } catch (err) {
+            console.warn(`テキスト読み込みエラー: ${filePath}`, err);
+        }
+    } else if (ext === '.amppl') {
+        const playlistItems = await parsePlaylistFile(filePath);
+        const items = [];
+        for (const item of playlistItems) {
+            try {
+                const content = await fs.readFile(item.path, 'utf-8');
+                items.push({ path: item.path, content });
+            } catch (err) {
+                console.warn(`プレイリスト内テキスト読み込みエラー: ${item.path}`, err);
+            }
+        }
+        return items;
+    }
+    return null;
 }

@@ -1,13 +1,14 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.45.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.46.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
 // --- localStorage保存・復元用キー定数 ---
 const STORAGE_KEYS = {
-    FILE_PATH: 'xVoice_filePath',
+    PLAYLIST: 'xVoice_playlist',             // ★ FILE_PATH を廃止し PLAYLIST を追加
+    PLAYLIST_INDEX: 'playlist_index',
     TEXT: 'xVoice_text',
     TEXT_BACKUP: 'xVoice_textBackup',
     LINE_INDEX: 'xVoice_lineIndex',
@@ -23,6 +24,7 @@ const STORAGE_KEYS = {
 // ショートカットキーと各ボタンのIDのマッピング定義
 const shortcutMap = {
     'ctrl+t': { control: 'btn-theme' },
+    'ctrl+d': { control: 'btn-folder-select' },
     'ctrl+f': { control: 'btn-file-select' },
     'ctrl+c': { control: 'btn-file-clear' },
     'ctrl+n': { control: 'btn-connect' },
@@ -30,6 +32,7 @@ const shortcutMap = {
     'ctrl+u': { control: 'btn-unity' },
     'ctrl+v': { control: 'btn-search' },
     'ctrl+s': { control: 'btn-save' },
+    'ctrl+l': { control: 'btn-playlist-save' },
     'ctrl+p': { control: 'btn-speak' },
     'ctrl+g': { control: 'btn-generate' },
     'ctrl+m': { control: 'btn-mute' },
@@ -66,8 +69,8 @@ let btnSpeak = null;             // 音声再生 / 停止ボタン
 let btnGenerate = null;          // 音声ファイル（mp3）書き出しボタン
 let audioPlayer = null;          // メイン音声再生用 Audio 要素
 let audioPlayerNext = null;      // 次行の先行読み込み（ダブルバッファリング）用 Audio 要素
-let statusDiv = null;            // アプリケーション状態メッセージ表示エリア
-let btnMute = null;        // 音量ミュート
+let statusDisplay = null;        // アプリケーション状態メッセージ表示エリア
+let btnMute = null;              // 音量ミュート
 let volumeDisplay = null;        // 音量表示
 let volumeSlider = null;         // 音量バー
 let engineProgressBar = null;    // エンジン初期化進捗バー
@@ -78,7 +81,6 @@ let textBufferProgressBar = null; // 音声データ生成（バッファリン�
 let mp3ProgressBar = null;       // mp3ファイル出力進捗バー
 let cacheCountDisplay = null;    // キャッシュ数
 let cacheLimitSlider = null;     // キャッシュ数変更バー
-let textElem = null;             // 表示用・強調表示用テキストエレメント
 let writingModeSelect = null;    // 縦書き / 横書き切り替えドロップダウン
 let toastMessage = null;         // トースト通知メッセージ表示要素
 let loadingOverlay = null;       // 処理中ローディング表示用オーバーレイ
@@ -95,12 +97,15 @@ let appConfigContainer = null;   // アプリ設定用モーダルコンテナ
 let changelogContent = null;     // 更新履歴本文表示領域
 let changelogCloseBtn = null;    // 更新履歴閉じるボタン
 let changelogTitle = null;       // 更新履歴ダイアログタイトル要素
+let btnPlaylistSave = null;      // プレイリスト保存
 
 // 🔲localStorage復元🔲
 let localSettings = {};          // アプリ設定値を保持するメモリ内オブジェクト
 
 // 🔲グローバル変数定義🔲
 let isSecondary = false;         // 多重起動（セカンダリインスタンス）判定フラグ
+let playlist = [];               // プレイリストデータ: [{ path: string, content: string }]
+let playingIndex = -1;           // 現在再生中のインデックス (-1 は未再生)
 let isPlaying = false;           // 音声再生中フラグ
 let isStopped = false;           // 再生停止要求フラグ
 let isLineJumped = false;        // 再生中の行ジャンプ用フラグ
@@ -151,6 +156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         setupFilePathAndText();
     }
+    renderPlaylistUI();
     // テキスト向きの復元
     setupTextDirection();
     // ☀️／🌙 テーマ設定の復元
@@ -195,9 +201,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerWritingModeSelectChange();
     // ☀️／🌙テーマ設定のクリックイベント
     registerBtnThemeClick();
+    // プレイリストの変更いベント
+    registerFilePathDisplayChange();
     // テキストのカーソル位置の変更イベント
     registerTextInputClick();
-    // 📁ファイル選択のクリックイベント
+    // 📁フォルダ選択のクリックイベント
+    registerBtnFolderSelectClick();
+    // 🗒️ファイル選択のクリックイベント
     registerBtnFileSelectClick();
     // 🗑️クリアのクリックイベント
     registerBtnFileClearClick();
@@ -215,6 +225,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerBtnSearchClick();
     // 💾保存のクリックイベント
     registerBtnSaveClick();
+    // 📚プレイリスト保存のクリックイベント
+    registerBtnPlaylistSaveClick();
     // ▶️再生／⏹️停止のクリックイベント
     registerBtnSpeakClick();
     // 🎤生成／中止のクリックイベント
@@ -252,9 +264,10 @@ async function setupAllDomSettings() {
     btnConnect = document.getElementById('btn-connect');
     inputAddress = document.getElementById('input-address');
     engineProgress = document.getElementById('engine-progress');
+    btnFolderSelect = document.getElementById('btn-folder-select');
     btnFileSelect = document.getElementById('btn-file-select');
     filePathDisplay = document.getElementById('file-path-display');
-    textInput = document.getElementById('text');
+    textInput = document.getElementById('text-input');
     fontSizeSelect = document.getElementById('font-size-select');
     btnFileClear = document.getElementById('btn-file-clear');
     btnRuby = document.getElementById('btn-ruby');
@@ -265,7 +278,7 @@ async function setupAllDomSettings() {
     btnGenerate = document.getElementById('btn-generate');
     audioPlayer = document.getElementById('audio-player');
     audioPlayerNext = document.getElementById('audio-player-next');
-    statusDiv = document.getElementById('status');
+    statusDisplay = document.getElementById('status-display');
     btnMute = document.getElementById('btn-mute');
     volumeDisplay = document.getElementById('volume-display');
     volumeSlider = document.getElementById('volume-slider');
@@ -277,7 +290,6 @@ async function setupAllDomSettings() {
     mp3ProgressBar = document.getElementById('mp3-progress');
     cacheCountDisplay = document.getElementById('cache-count-display');
     cacheLimitSlider = document.getElementById('cache-limit-slider');
-    textElem = document.getElementById('text');
     writingModeSelect = document.getElementById('writing-mode-select');
     toastMessage = document.getElementById('toast-message');
     loadingOverlay = document.getElementById('loading-overlay');
@@ -294,6 +306,7 @@ async function setupAllDomSettings() {
     changelogContent = document.getElementById('changelogContent');
     changelogCloseBtn = document.getElementById('changelogCloseBtn');
     changelogTitle = changelogContainer?.querySelector('h1');
+    btnPlaylistSave = document.getElementById('btn-playlist-save');
 }
 
 // 多重起動時の localStorage 書き込み防止処理
@@ -328,16 +341,19 @@ async function setupLocalStorageProtection() {
 async function setupAllLocalStorageSetting() {
     if (!isSecondary) {
         // --- 初回起動（Primary）---
-        localSettings[STORAGE_KEYS.FILE_PATH] = localStorage.getItem(STORAGE_KEYS.FILE_PATH);
-        localSettings[STORAGE_KEYS.SERVER_ADDRESS] = localStorage.getItem(STORAGE_KEYS.SERVER_ADDRESS) || DEFAULT_HOST;
+        localSettings[STORAGE_KEYS.PLAYLIST] = localStorage.getItem(STORAGE_KEYS.PLAYLIST);
+        localSettings[STORAGE_KEYS.PLAYLIST_INDEX] = localStorage.getItem(STORAGE_KEYS.PLAYLIST_INDEX) || '0';
+        localSettings[STORAGE_KEYS.TEXT] = localStorage.getItem(STORAGE_KEYS.TEXT);
+        localSettings[STORAGE_KEYS.TEXT_BACKUP] = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP) || '';
+        localSettings[STORAGE_KEYS.LINE_INDEX] = localStorage.getItem(STORAGE_KEYS.LINE_INDEX);
         localSettings[STORAGE_KEYS.VOLUME] = localStorage.getItem(STORAGE_KEYS.VOLUME) || '0.2';
         localSettings[STORAGE_KEYS.FONT_SIZE] = localStorage.getItem(STORAGE_KEYS.FONT_SIZE) || '16px';
-        localSettings[STORAGE_KEYS.TEXT] = localStorage.getItem(STORAGE_KEYS.TEXT);
-        localSettings[STORAGE_KEYS.LINE_INDEX] = localStorage.getItem(STORAGE_KEYS.LINE_INDEX);
-        localSettings[STORAGE_KEYS.TEXT_BACKUP] = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP) || '';
-        localSettings[STORAGE_KEYS.TEXT_DIRECTION] = localStorage.getItem(STORAGE_KEYS.TEXT_DIRECTION) || 'horizontal-tb';
         localSettings[STORAGE_KEYS.SPEAKER] = localStorage.getItem(STORAGE_KEYS.SPEAKER);
-        localSettings[STORAGE_KEYS.CACHE_LIMIT] = localStorage.getItem(STORAGE_KEYS.CACHE_LIMIT || PREFETCH_LINES.toString());
+        localSettings[STORAGE_KEYS.TEXT_DIRECTION] = localStorage.getItem(STORAGE_KEYS.TEXT_DIRECTION) || 'horizontal-tb';
+        localSettings[STORAGE_KEYS.SERVER_ADDRESS] = localStorage.getItem(STORAGE_KEYS.SERVER_ADDRESS) || DEFAULT_HOST;
+        localSettings[STORAGE_KEYS.CACHE_LIMIT] = localStorage.getItem(STORAGE_KEYS.CACHE_LIMIT) || PREFETCH_LINES.toString();
+        localSettings[STORAGE_KEYS.BASE_VOLUME] = localStorage.getItem(STORAGE_KEYS.BASE_VOLUME) || '0.2';
+        localSettings[STORAGE_KEYS.IS_MUTED] = localStorage.getItem(STORAGE_KEYS.IS_MUTED) || 'false';
 
         await exportSettingsToFile(settingsFilePath);
 
@@ -352,16 +368,19 @@ async function setupAllLocalStorageSetting() {
             return currentVal ?? defaultValue;
         };
 
-        localSettings[STORAGE_KEYS.FILE_PATH] = getVal(STORAGE_KEYS.FILE_PATH, localSettings[STORAGE_KEYS.FILE_PATH], null);
-        localSettings[STORAGE_KEYS.SERVER_ADDRESS] = getVal(STORAGE_KEYS.SERVER_ADDRESS, localSettings[STORAGE_KEYS.SERVER_ADDRESS], DEFAULT_HOST);
+        localSettings[STORAGE_KEYS.PLAYLIST] = getVal(STORAGE_KEYS.PLAYLIST, localSettings[STORAGE_KEYS.PLAYLIST], null);
+        localSettings[STORAGE_KEYS.PLAYLIST_INDEX] = getVal(STORAGE_KEYS.PLAYLIST_INDEX, localSettings[STORAGE_KEYS.PLAYLIST_INDEX], '0');
+        localSettings[STORAGE_KEYS.TEXT] = getVal(STORAGE_KEYS.TEXT, localSettings[STORAGE_KEYS.TEXT], null);
+        localSettings[STORAGE_KEYS.TEXT_BACKUP] = getVal(STORAGE_KEYS.TEXT_BACKUP, localSettings[STORAGE_KEYS.TEXT_BACKUP], '');
+        localSettings[STORAGE_KEYS.LINE_INDEX] = getVal(STORAGE_KEYS.LINE_INDEX, localSettings[STORAGE_KEYS.LINE_INDEX], null);
         localSettings[STORAGE_KEYS.VOLUME] = getVal(STORAGE_KEYS.VOLUME, localSettings[STORAGE_KEYS.VOLUME], '0.2');
         localSettings[STORAGE_KEYS.FONT_SIZE] = getVal(STORAGE_KEYS.FONT_SIZE, localSettings[STORAGE_KEYS.FONT_SIZE], '16px');
-        localSettings[STORAGE_KEYS.TEXT] = getVal(STORAGE_KEYS.TEXT, localSettings[STORAGE_KEYS.TEXT], null);
-        localSettings[STORAGE_KEYS.LINE_INDEX] = getVal(STORAGE_KEYS.LINE_INDEX, localSettings[STORAGE_KEYS.LINE_INDEX], null);
-        localSettings[STORAGE_KEYS.TEXT_BACKUP] = getVal(STORAGE_KEYS.TEXT_BACKUP, localSettings[STORAGE_KEYS.TEXT_BACKUP], '');
-        localSettings[STORAGE_KEYS.TEXT_DIRECTION] = getVal(STORAGE_KEYS.TEXT_DIRECTION, localSettings[STORAGE_KEYS.TEXT_DIRECTION], 'horizontal-tb');
         localSettings[STORAGE_KEYS.SPEAKER] = getVal(STORAGE_KEYS.SPEAKER, localSettings[STORAGE_KEYS.SPEAKER], null);
+        localSettings[STORAGE_KEYS.TEXT_DIRECTION] = getVal(STORAGE_KEYS.TEXT_DIRECTION, localSettings[STORAGE_KEYS.TEXT_DIRECTION], 'horizontal-tb');
+        localSettings[STORAGE_KEYS.SERVER_ADDRESS] = getVal(STORAGE_KEYS.SERVER_ADDRESS, localSettings[STORAGE_KEYS.SERVER_ADDRESS], DEFAULT_HOST);
         localSettings[STORAGE_KEYS.CACHE_LIMIT] = getVal(STORAGE_KEYS.CACHE_LIMIT, localSettings[STORAGE_KEYS.CACHE_LIMIT], PREFETCH_LINES.toString());
+        localSettings[STORAGE_KEYS.BASE_VOLUME] = getVal(STORAGE_KEYS.CACHE_LIMIT, localSettings[STORAGE_KEYS.BASE_VOLUME], '0,2');
+        localSettings[STORAGE_KEYS.IS_MUTED] = getVal(STORAGE_KEYS.CACHE_LIMIT, localSettings[STORAGE_KEYS.IS_MUTED], 'false');
     }
 }
 
@@ -447,8 +466,8 @@ function setupAddress() {
 // 音量設定の復元
 function setupVolume() {
     // 1. localStorage から状態を読み込み
-    const savedBaseVolume = localStorage.getItem(STORAGE_KEYS.BASE_VOLUME);
-    const savedIsMuted = localStorage.getItem(STORAGE_KEYS.IS_MUTED);
+    const savedBaseVolume = localSettings[STORAGE_KEYS.BASE_VOLUME];
+    const savedIsMuted = localSettings[STORAGE_KEYS.IS_MUTED];
 
     // baseVolume が未保存なら デフォルト 0.2 (20%)
     let baseVol = savedBaseVolume !== null ? parseFloat(savedBaseVolume) : 0.2;
@@ -480,56 +499,76 @@ function setupFontSize() {
 
 // 引数ファイルパスの設定
 function setupFilePathAndTextArgs(launchData) {
-    // ★１ & ★３：起動時引数が存在する場合、localStorageからの復元をスキップして引数のデータで画面を更新
-    // 引数ファイルパスの設定
-    if (filePathDisplay) {
-        filePathDisplay.textContent = launchData.filePath;
-        updateFilePathMarquee();
+    if (launchData && launchData.filePath) {
+        playlist = [{ path: launchData.filePath, content: launchData.content }];
+        playingIndex = -1;
+        localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST, JSON.stringify(playlist));
+        localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, '0');
     }
 
-    // 引数ファイルのテキストの設定
     if (textInput) {
-        const normalizedContent = launchData.content.replace(/\r\n/g, '\n');
+        const normalizedContent = (launchData.content || '').replace(/\r\n/g, '\n');
         textInput.value = normalizedContent;
         previousText = normalizedContent;
         textBackup = normalizedContent;
         if (btnSave) btnSave.classList.remove('change-active');
     }
 
-    // 再生位置の初期化
     currentLineIndex = 0;
 
-    // localStorage も起動引数の値に上書き更新
-    localStorageSetItemAndFile(STORAGE_KEYS.FILE_PATH, launchData.filePath);
-    localStorageSetItemAndFile(STORAGE_KEYS.TEXT, launchData.content);
+    localStorageSetItemAndFile(STORAGE_KEYS.TEXT, launchData.content || '');
     localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, '0');
 }
 
-// ファイルパス＆テキストの復元
+// プレイリスト＆テキストの復元
 function setupFilePathAndText() {
-    // 起動時引数がない場合は従来通り localStorage から復元
-
-    // ファイルパスの復元
-    if (localSettings[STORAGE_KEYS.FILE_PATH] && filePathDisplay) {
-        filePathDisplay.textContent = localSettings[STORAGE_KEYS.FILE_PATH];
-        updateFilePathMarquee();
+    // 1. STORAGE_KEYS.PLAYLIST からプレイリスト配列を復元
+    if (localSettings[STORAGE_KEYS.PLAYLIST]) {
+        try {
+            const parsed = JSON.parse(localSettings[STORAGE_KEYS.PLAYLIST]);
+            if (Array.isArray(parsed)) {
+                playlist = parsed;
+                playingIndex = parseInt(localSettings[STORAGE_KEYS.PLAYLIST_INDEX], 10);
+            } else {
+                playlist = [];
+                playingIndex = -1;
+            }
+        } catch (e) {
+            console.error('PLAYLIST parsing error:', e);
+            playlist = [];
+            playingIndex = -1;
+        }
+    } else {
+        playlist = [];
+        playingIndex = -1;
     }
 
-    // テキストの復元
+    // 3. STORAGE_KEYS.PLAYLIST_INDEX から保存されているインデックスを取得
+    let savedIndex = parseInt(localSettings[STORAGE_KEYS.PLAYLIST_INDEX], 10);
+    if (isNaN(savedIndex) || savedIndex < 0 || savedIndex >= playlist.length) {
+        savedIndex = 0;
+    }
+
+    // 4. ドロップダウンの選択値を同期
+    if (filePathDisplay && playlist.length > 0) {
+        filePathDisplay.value = savedIndex;
+    }
+
+    // 5. テキストエリアの復元
     if (localSettings[STORAGE_KEYS.TEXT] !== null && textInput) {
         const normalizedlocalSettings = localSettings[STORAGE_KEYS.TEXT].replace(/\r\n/g, '\n');
         textInput.value = normalizedlocalSettings;
         previousText = normalizedlocalSettings;
     }
 
-    // 再生位置の復元
+    // 6. カーソル行インデックスの復元
     if (localSettings[STORAGE_KEYS.LINE_INDEX] !== null) {
         currentLineIndex = parseInt(localSettings[STORAGE_KEYS.LINE_INDEX], 10) || 0;
     }
 
-    // テキストバックアップの復元
-    textBackup = localSettings[STORAGE_KEYS.TEXT_BACKUP];
-    if (textBackup !== textInput.value) {
+    // 7. バックアップテキストの比較・変更フラグ更新
+    textBackup = localSettings[STORAGE_KEYS.TEXT_BACKUP] || '';
+    if (textBackup !== (textInput ? textInput.value : '')) {
         if (btnSave) btnSave.classList.add('change-active');
     }
 }
@@ -546,7 +585,7 @@ function setupTheme() {
 
 // Engine 初期化 (アプリ起動時)
 async function initEngine() {
-    if (statusDiv) statusDiv.textContent = 'Engine 接続確認中...';
+    if (statusDisplay) statusDisplay.textContent = 'Engine 接続確認中...';
     isEngineReady = false;
     if (btnSpeak) btnSpeak.disabled = true;
     if (btnGenerate) btnGenerate.disabled = true;
@@ -560,12 +599,12 @@ async function initEngine() {
         isSelfConnected = res.isSelfConnected;
         updateConnectionUI(true);
         await loadSpeakers();
-        showToast('Engine に接続済みです');
+        showToast('Engine 接続済みです');
     } else {
         // 未起動の場合：自動接続（起動）を開始
         isEngineReady = false;
         updateConnectionUI(false);
-        if (statusDiv) statusDiv.textContent = 'Engine 未接続（自動起動・接続を試行中...）';
+        if (statusDisplay) statusDisplay.textContent = 'Engine 未接続（自動起動・接続を試行中...）';
 
         // 自動接続ハンドラーを実行
         await handleConnectToggle();
@@ -580,7 +619,7 @@ async function initEngine() {
 // 画面のサイズ変更イベント
 function registerWindowResize() {
     window.addEventListener('resize', () => {
-        updateFilePathMarquee();
+        renderPlaylistUI();
         if (textInput) {
             moveCursorToLineStart(currentLineIndex);
             setTimeout(() => {
@@ -786,25 +825,47 @@ function registerDocumentDrop() {
 
         if (isPlaying) return;
 
-        let files = e.dataTransfer?.files;
+        const files = e.dataTransfer?.files;
         if (!files || files.length === 0) return;
 
-        const droppedFile = files[0];
-        const filePath = droppedFile.path || (window.api.getFilePath ? window.api.getFilePath(droppedFile) : '');
+        // ドロップされた全アイテムのパスを取得
+        const filePaths = Array.from(files).map(file => {
+            return file.path || (window.api.getFilePath ? window.api.getFilePath(file) : '');
+        }).filter(p => p !== '');
 
-        // --- 【追加】Chromium 側の DataTransfer 情報を削除してファイルを解放 ---
+        // DataTransfer 参照の解放
         if (e.dataTransfer && typeof e.dataTransfer.clearData === 'function') {
             e.dataTransfer.clearData();
         }
-        // FileList 参照の破棄
-        files = null;
-        // -------------------------------------------------------------------
 
-        if (filePath) {
+        if (filePaths.length > 0) {
             try {
-                const fileData = await window.api.readFileByPath(filePath);
-                if (fileData) {
-                    loadFileContent(fileData.path, fileData.content);
+                // IPC 経由で解析・収集を実行
+                const newItems = await window.api.processDroppedPaths(filePaths);
+
+                if (newItems && newItems.length > 0) {
+                    // 1. 既存のプレイリストを取得 (グローバル変数 `playlist` や 既存取得関数等を利用)
+                    const currentItems = Array.isArray(playlist) ? playlist : [];
+
+                    // 2. 既存アイテムとドロップ追加分を結合
+                    const combinedItems = [...currentItems, ...newItems];
+
+                    // 3. 重複パスの排除
+                    const uniqueMap = new Map();
+                    for (const item of combinedItems) {
+                        if (item && item.path && !uniqueMap.has(item.path)) {
+                            uniqueMap.set(item.path, item);
+                        }
+                    }
+                    const mergedItems = Array.from(uniqueMap.values());
+
+                    // 4. 結合後の全要素をパスの昇順でソート (自然順ソート)
+                    mergedItems.sort((a, b) => 
+                        a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' })
+                    );
+
+                    // 5. プレイリストへの設定処理を実行
+                    addFilesToPlaylist(mergedItems);
                 }
             } catch (err) {
                 console.error('D&D ファイル読み込みエラー:', err);
@@ -885,6 +946,23 @@ function registerBtnThemeClick() {
     });
 }
 
+// プレイリストの変更いベント
+function registerFilePathDisplayChange() {
+    filePathDisplay?.addEventListener('change', (e) => {
+        const selectedIndex = parseInt(e.target.value, 10);
+        if (!isNaN(selectedIndex) && playlist[selectedIndex]) {
+            if (isPlaying) {
+                stopPlayback();
+            }
+            playingIndex = -1;
+            loadPlaylistItem(selectedIndex, false);
+
+            // ★ 選択された Index を localStorage に保存
+            localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, selectedIndex);
+        }
+    });
+}
+
 // テキストのカーソル位置の変更イベント
 function registerTextInputClick() {
     textInput?.addEventListener('click', (e) => { 
@@ -898,46 +976,77 @@ function registerTextInputClick() {
     });
 }
 
-// 📁ファイル選択のクリックイベント
+// 📁 フォルダ選択のクリックイベント
+function registerBtnFolderSelectClick() {
+    btnFolderSelect?.addEventListener('click', async () => {
+        const fileDataList = await window.api.selectFolder();
+        
+        // キャンセルまたは該当ファイルがない場合
+        if (!fileDataList || fileDataList.length === 0) return;
+
+        // ★ ファイル/フォルダ変更時のリセット処理
+        if (isPlaying) {
+            stopPlayback(); // 再生中の場合は停止
+        }
+        clearAudioCache();   // キャッシュクリア
+        resetProgressBars(); // 進捗バーを0%にリセット
+
+        // ★ パスの昇順で並べ替え実施 (自然順ソート)
+        fileDataList.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' }));
+
+        // 取得したファイル配列をプレイリストに反映
+        addFilesToPlaylist(fileDataList);
+    });
+}
+
+// 🗒️ファイル選択のクリックイベント
 function registerBtnFileSelectClick() {
     btnFileSelect?.addEventListener('click', async () => {
-        const fileData = await window.api.selectFile();
-        if (!fileData) return;
-    
+        const fileDataList = await window.api.selectFile();
+        if (!fileDataList || fileDataList.length === 0) return;
+
         // ★ ファイル変更時のリセット処理
         if (isPlaying) {
             stopPlayback(); // 再生中の場合は停止
         }
         clearAudioCache();   // キャッシュクリア
         resetProgressBars(); // 進捗バーを0%にリセット
-    
-        loadFileContent(fileData.path, fileData.content);
+
+        // 取得したファイル配列をプレイリストに反映
+        addFilesToPlaylist(fileDataList);
     });
 }
 
 // 🗑️クリアのクリックイベント
 function registerBtnFileClearClick() {
     btnFileClear?.addEventListener('click', () => {
-        if (filePathDisplay) filePathDisplay.textContent = '選択されていません';
-        updateFilePathMarquee();
+        playlist = [];
+        playingIndex = -1;
+
+        // <select>（プレイリスト表示）を「選択されていません」のみに初期化
+        if (filePathDisplay) {
+            filePathDisplay.innerHTML = '<option value="">選択されていません</option>';
+            filePathDisplay.value = '';
+        }
+
         if (textInput) textInput.value = '';
         if (btnGenerate) btnGenerate.disabled = true;
-    
+
         currentLineIndex = 0;
         previousText = '';
         textBackup = '';
-        btnSave.classList.remove('change-active');
-    
-        // ★ クリア時のリセット処理
-        if (isPlaying) {
-            stopPlayback(); // 再生中の場合は停止
-        }
-        clearAudioCache();   // キャッシュクリア
-        resetProgressBars(); // 進捗バーを0%にリセット
+        if (btnSave) btnSave.classList.remove('change-active');
 
-        localStorage.removeItem(STORAGE_KEYS.FILE_PATH);
+        if (isPlaying) {
+            stopPlayback();
+        }
+        clearAudioCache();
+        resetProgressBars();
+
+        localStorage.removeItem(STORAGE_KEYS.PLAYLIST);
+        localStorage.removeItem(STORAGE_KEYS.PLAYLIST_INDEX);
         localStorage.removeItem(STORAGE_KEYS.TEXT);
-        localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, 0);
+        localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, '0');
         localStorage.removeItem(STORAGE_KEYS.TEXT_BACKUP);
     });
 }
@@ -1211,14 +1320,55 @@ function registerBtnSaveClick() {
             return;
         }
 
-        const rawPath = filePathDisplay?.textContent?.trim() || '';
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        const currentItem = playlist[selectedIndex];
+        const rawPath = currentItem ? currentItem.path : '';
         const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
+
         const result = await window.api.saveTextFile(textInput.value, currentPath);
         if (result.success) {
             console.log('保存完了:', result.filePath);
             textBackup = textInput.value;
+
+            // プレイリスト内の内容・パスを同期更新
+            if (currentItem) {
+                currentItem.path = result.filePath;
+                currentItem.content = textInput.value;
+                renderPlaylistUI();
+                filePathDisplay.value = selectedIndex;
+            }
+
             btnSave.classList.remove('change-active');
             localStorageSetItemAndFile(STORAGE_KEYS.TEXT_BACKUP, textBackup);
+        }
+    });
+}
+
+// 📚プレイリスト保存のクリックイベント
+function registerBtnPlaylistSaveClick() {
+    btnPlaylistSave?.addEventListener('click', async () => {
+        if (!playlist || playlist.length === 0) {
+            showToast('保存するプレイリストアイテムがありません。', 'warning');
+            return;
+        }
+
+        // プレイリストの各要素から path を抽出
+        const paths = playlist.map(item => item.path).filter(Boolean);
+
+        if (paths.length === 0) {
+            showToast('有効なファイルパスがありません。', 'warning');
+            return;
+        }
+
+        const result = await window.api.savePlaylistFile(paths);
+
+        if (result.success) {
+            showToast(`プレイリストを保存しました: ${result.filePath}`, 'info');
+        } else if (result.reason === 'canceled') {
+            // キャンセル時は何もしない
+            console.log('プレイリスト保存がキャンセルされました。');
+        } else if (result.error) {
+            showToast(`保存に失敗しました: ${result.error}`, 'error');
         }
     });
 }
@@ -1250,17 +1400,17 @@ function registerBtnGenerateClick() {
 function registerbtnMuteClick() {
     // 【1】 [🔊 / 🔇] ボタンのトグルイベント
     btnMute.addEventListener('click', () => {
-        const currentIsMuted = localStorage.getItem(STORAGE_KEYS.IS_MUTED) === 'true';
+        const currentIsMuted = localSettings[STORAGE_KEYS.IS_MUTED] === 'true';
         const nextIsMuted = !currentIsMuted;
 
         if (nextIsMuted) {
             // --- ミュート時 (isMuted = true) ---
             // ※ baseVolume は変更・上書きせずそのまま維持
-            const baseVol = parseFloat(localStorage.getItem(STORAGE_KEYS.BASE_VOLUME) || '0.2');
+            const baseVol = parseFloat(localSettings[STORAGE_KEYS.BASE_VOLUME]);
             applyVolumeState(baseVol, true);
         } else {
             // --- ミュート解除時 (isMuted = false) ---
-            let baseVol = parseFloat(localStorage.getItem(STORAGE_KEYS.BASE_VOLUME) || '0.2');
+            let baseVol = parseFloat(localSettings[STORAGE_KEYS.BASE_VOLUME]);
             
             // baseVolume が存在しない、または 0% の場合は 20% (0.2) を復元
             if (isNaN(baseVol) || baseVol <= 0) {
@@ -1350,12 +1500,12 @@ function registerWindowApiOnEngineProgress() {
 
             if (isRunning) {
                 isEngineReady = true;
-                showToast('Engine の起動が完了しました');
+                showToast('Engine 起動が完了しました');
                 showProgressBar('text');
             } else {
                 isEngineReady = false;
                 updateProgressUI(engineProgressBar, current, total, '回');
-                if (statusDiv) statusDiv.textContent = `Engine 起動確認中... (${current}/${total} - ${percent}%)`;
+                if (statusDisplay) statusDisplay.textContent = `Engine 起動確認中... (${current}/${total} - ${percent}%)`;
             }
         }
     });
@@ -1364,8 +1514,9 @@ function registerWindowApiOnEngineProgress() {
 // 🔲共通ヘルパー関数🔲
 // 「🔄接続 / 切断」のトグル実行関数
 async function handleConnectToggle() {
+    showProgressBar('engine');
     if (isEngineReady) {
-        if (statusDiv) statusDiv.textContent = 'Engine から切断中...';
+        if (statusDisplay) statusDisplay.textContent = 'Engine 切断中...';
         await window.api.disconnectEngine();
         isEngineReady = false;
         isSelfConnected = false;
@@ -1376,9 +1527,9 @@ async function handleConnectToggle() {
         }
         if (btnSpeak) btnSpeak.disabled = true;
         if (btnGenerate) btnGenerate.disabled = true;
-        showToast('Engine から切断されました');
+        showToast('Engine 切断しました');
     } else {
-        if (statusDiv) statusDiv.textContent = 'Engine に接続中...';
+        if (statusDisplay) statusDisplay.textContent = 'Engine 接続中...';
         
         // 安全チェックを入れることで ReferenceError を防止
         if (typeof engineProgress !== 'undefined' && engineProgress) {
@@ -1401,13 +1552,14 @@ async function handleConnectToggle() {
             isSelfConnected = res.isSelfConnected;
             updateConnectionUI(true);
             await loadSpeakers();
-            showToast('Engine に接続しました');
+            showToast('Engine 接続しました');
         } else {
             isEngineReady = false;
             updateConnectionUI(false);
             showToast(res.error || '接続に失敗しました', 'error');
         }
     }
+    showProgressBar('text');
 }
 
 // 接続状態に応じたUI切り替えヘルパー
@@ -1445,7 +1597,7 @@ function getServerAddress() {
 }
 
 // 🔲設定・適用ロジック関数群🔲
-
+// テキスト方向反映
 function applyTextDirection(direction) {
     if (!textInput) return;
 
@@ -1453,11 +1605,12 @@ function applyTextDirection(direction) {
     if (writingModeSelect) writingModeSelect.value = direction;
     localStorageSetItemAndFile(STORAGE_KEYS.TEXT_DIRECTION, direction);
 
-    if (textElem) {
-        textElem.classList.toggle('is-vertical', direction === 'vertical-rl');
+    if (textInput) {
+        textInput.classList.toggle('is-vertical', direction === 'vertical-rl');
     }
 }
 
+// フォントサイズ反映
 function applyFontSize(size) {
     if (!textInput) return;
 
@@ -1471,8 +1624,6 @@ function applyFontSize(size) {
     if (filePathDisplay) filePathDisplay.style.fontSize = size;
     if (fontSizeSelect) fontSizeSelect.value = size;
     localStorageSetItemAndFile(STORAGE_KEYS.FONT_SIZE, size);
-
-    updateFilePathMarquee();
 
     const newLineHeight = parseFloat(window.getComputedStyle(textInput).lineHeight) || 20;
     if (oldLineHeight > 0) {
@@ -1494,6 +1645,7 @@ function setTheme(theme) {
     if (btnTheme) btnTheme.textContent = theme === 'dark' ? '☀️' : '🌙';
 }
 
+// 減殺行位置取得
 function getCursorLineIndex() {
     if (!textInput) return 0;
     const fullText = textInput.value.replace(/\r\n/g, '\n');
@@ -1521,23 +1673,20 @@ function handleCursorChange() {
     }
 }
 
+// テキストパス・テキスト反映
 function loadFileContent(path, content) {
     const loadedText = (content || '').replace(/\r\n/g, '\n');
-
-    if (filePathDisplay) filePathDisplay.textContent = path;
-    localStorageSetItemAndFile(STORAGE_KEYS.FILE_PATH, path);
-
-    updateFilePathMarquee();
 
     if (textInput) textInput.value = loadedText;
     previousText = loadedText;
     textBackup = loadedText;
-    btnSave.classList.remove('change-active');
+    if (btnSave) btnSave.classList.remove('change-active');
     currentLineIndex = 0;
     isFirstPlay = true;
 
+    localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST, JSON.stringify(playlist));
     localStorageSetItemAndFile(STORAGE_KEYS.TEXT, loadedText);
-    localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, 0);
+    localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, '0');
     localStorageSetItemAndFile(STORAGE_KEYS.TEXT_BACKUP, loadedText);
 
     if (btnGenerate) btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
@@ -1547,6 +1696,7 @@ function loadFileContent(path, content) {
     moveCursorToLineStart(0);
 }
 
+// 再生／停止ボタン切替
 function updateButtonStates(playing) {
     isPlaying = playing;
 
@@ -1574,8 +1724,11 @@ function updateButtonStates(playing) {
     if (fontSizeSelect) fontSizeSelect.disabled = playing || isGenerating;
     if (writingModeSelect) writingModeSelect.disabled = playing || isGenerating;
     if (textInput) textInput.readOnly = playing || isGenerating;
+
+    renderPlaylistUI();
 }
 
+// 生成ボタン再表示
 function resetGenerateButton() {
     isGenerating = false;
     isGenerateCanceled = false;
@@ -1629,7 +1782,7 @@ async function loadSpeakers() {
         showLoading(false);
         return true;
     } catch (err) {
-        showToast('Engine に接続できません', 'error');
+        showToast('Engine 接続できません', 'error');
         // ★ レスポンス受領後（成功・失敗問わず）にローディング非表示
         showLoading(false);
         return false;
@@ -1655,15 +1808,20 @@ async function fetchAudioBuffer(text, speakerId) {
     return await synthRes.arrayBuffer();
 }
 
+// 再生停止
 function stopPlayback() {
     if (!isPlaying) return;
 
     isStopped = true;
-    // clearAudioCache(); // 停止時にもキャッシュを完全にクリア
     stopAllAudioPlayers();
 
-    if (statusDiv) statusDiv.textContent = `停止しました (${currentLineIndex + 1} 行目で停止中)`;
+    if (statusDisplay) statusDisplay.textContent = `停止しました (${currentLineIndex + 1} 行目で停止中)`;
+
+    // ★ 停止処理: isPlaying フラグ・playingIndex をリセットし、アイコンを ⏹️ に戻す
+    isPlaying = false;
+    playingIndex = -1;
     updateButtonStates(false);
+    renderPlaylistUI();
 
     moveCursorToLineStart(currentLineIndex, true);
 }
@@ -1695,6 +1853,10 @@ async function playLineByLine() {
     isStopped = false;
     isLineJumped = false;
 
+    // ★ 再生開始: isPlaying フラグを更新し、アイコンを ▶️ に変更
+    isPlaying = true;
+    renderPlaylistUI();
+
     stopAllAudioPlayers();
     
     const currentSpeakerId = speakerSelect.value;
@@ -1724,7 +1886,7 @@ async function playLineByLine() {
         const lineTrimmed = lineText.trim();
 
         if (lineTrimmed.length > 0) {
-            if (statusDiv) statusDiv.textContent = `再生中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
+            if (statusDisplay) statusDisplay.textContent = `再生中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
 
             moveCursorToLineStart(i);
 
@@ -1745,9 +1907,6 @@ async function playLineByLine() {
                         showLoading(false);
                     }
                 }
-
-                // ★ 修正点: 以前あった audioCache.delete(i); は削除します
-                // （削除しないことで、停止後の再再生時にもこのキャッシュを活用できます）
 
                 triggerPrefetch(lines, currentSpeakerId);
 
@@ -1823,21 +1982,24 @@ async function playLineByLine() {
     // 後処理
     stopAllAudioPlayers();
 
-    // ★ 修正点: ループ末尾にあった無条件の clearAudioCache(); を削除
-    // （最後まで再生完了した時のみクリアしたい場合は以下の中に記述）
     if (!isStopped && !isLineJumped) {
         clearAudioCache(); // 最後まで再生しきった場合のみクリア
         currentLineIndex = 0;
         localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, 0);
         showToast('再生完了');
         if (textBufferProgressBar) textBufferProgressBar.value = 0;
-        showProgressBar('text')
+        showProgressBar('text');
         moveCursorToLineStart(0, true);
     }
 
+    // ★ 再生終了/完了: isPlaying フラグ・playingIndex をリセットし、アイコンを ⏹️ に戻す
+    isPlaying = false;
+    playingIndex = -1;
     updateButtonStates(false);
+    renderPlaylistUI();
 }
 
+// 全テキスト生成実行
 async function generateFullTextMp3() {
     if (!textInput) return;
 
@@ -1859,6 +2021,9 @@ async function generateFullTextMp3() {
 
     isGenerating = true;
     isGenerateCanceled = false;
+
+    // ★ 生成開始: アイコンを 🎤 に変更
+    renderPlaylistUI();
 
     btnGenerate.textContent = '🎤';
     btnGenerate.classList.add('generate-active');
@@ -1893,7 +2058,7 @@ async function generateFullTextMp3() {
 
             const progressPercent = Math.round(((i + 1) / targets.length) * 100);
 
-            if (statusDiv) statusDiv.textContent = `音声生成中 (${i + 1}/${targets.length} 行目 - ${progressPercent}%)`;
+            if (statusDisplay) statusDisplay.textContent = `音声生成中 (${i + 1}/${targets.length} 行目 - ${progressPercent}%)`;
             if (mp3ProgressBar) mp3ProgressBar.value = progressPercent;
 
             const buffer = await fetchAudioBuffer(text, speakerId);
@@ -1907,11 +2072,14 @@ async function generateFullTextMp3() {
             audioBuffers.push(buffer);
         }
 
-        if (statusDiv) statusDiv.textContent = '合成音声（mp3）を生成中...';
+        if (statusDisplay) statusDisplay.textContent = '合成音声（mp3）を生成中...';
 
         let defaultFilename = 'xVoice生成.mp3';
-        if (localSettings[STORAGE_KEYS.FILE_PATH]) {
-            const parts = localSettings[STORAGE_KEYS.FILE_PATH].split(/[/\\]/);
+        const currentIndex = parseInt(localSettings[STORAGE_KEYS.PLAYLIST_INDEX], 10);
+        const currentItem = playlist[currentIndex];
+        
+        if (currentItem && currentItem.path) {
+            const parts = currentItem.path.split(/[/\\]/);
             const originalName = parts[parts.length - 1];
             const baseName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
             defaultFilename = `${baseName}.mp3`;
@@ -1935,7 +2103,10 @@ async function generateFullTextMp3() {
         showProgressBar('text');
         console.error(err);
     } finally {
+        // ★ 生成完了/中止/エラー時: isGenerating フラグを解除し、アイコンを ⏹️ に戻す
+        isGenerating = false;
         resetGenerateButton();
+        renderPlaylistUI();
 
         setTimeout(() => {
             if (mp3ProgressBar) mp3ProgressBar.hidden = true;
@@ -1944,7 +2115,7 @@ async function generateFullTextMp3() {
 }
 
 // 🔲カーソル指定・レイアウト計算ヘルパー関数🔲
-
+// カーソル開始位置設定
 function moveCursorToLineStart(lineIndex, highlight = isPlaying) {
     if (!textInput) return;
     const fullText = textInput.value.replace(/\r\n/g, '\n');
@@ -2033,42 +2204,53 @@ function scrollTextareaToCharOffset(textarea, charIndex) {
     }
 }
 
-function updateFilePathMarquee() {
+// プレイリスト (select) の表示を更新し、状態に応じたアイコン（▶️ / 🎤 / ⏹️）を反映する
+function renderPlaylistUI() {
     if (!filePathDisplay) return;
 
-    const firstItem = filePathDisplay.querySelector('.marquee-item');
-    const currentText = firstItem ? firstItem.textContent.trim() : filePathDisplay.textContent.trim();
+    // 現在選択されている値を保持（再描画後の復元用）
+    const previousSelectedValue = filePathDisplay.value;
 
-    if (!currentText || currentText === '選択されていません') {
-        filePathDisplay.innerHTML = `<span class="file-path-text">${currentText}</span>`;
+    filePathDisplay.innerHTML = '';
+
+    if (!playlist || playlist.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '選択されていません';
+        filePathDisplay.appendChild(option);
         return;
     }
 
-    filePathDisplay.innerHTML = `
-        <span class="file-path-text">
-            <span class="marquee-item">${currentText}</span>
-            <span class="marquee-item">${currentText}</span>
-        </span>
-    `;
-
-    const textSpan = filePathDisplay.querySelector('.file-path-text');
-    const itemElem = filePathDisplay.querySelector('.marquee-item');
-    if (!textSpan || !itemElem) return;
-
-    requestAnimationFrame(() => {
-        const containerWidth = filePathDisplay.clientWidth;
-        const singleItemWidth = itemElem.getBoundingClientRect().width;
-
-        if (singleItemWidth > containerWidth) {
-            const speed = 100;
-            const duration = singleItemWidth / speed;
-
-            textSpan.style.setProperty('--marquee-duration', `${duration}s`);
-            textSpan.classList.add('scrolling');
-        } else {
-            filePathDisplay.innerHTML = `<span class="file-path-text">${currentText}</span>`;
-        }
+    // 1. 基本となる option 要素を生成（アイコンなしの純粋なパスを設定）
+    playlist.forEach((item, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = item.path || `Item ${index + 1}`;
+        filePathDisplay.appendChild(option);
     });
+
+    // 2. 選択位置の決定（再生中があればその位置、なければ前の選択位置、デフォルトは0）
+    let targetIndex = 0;
+    if (playingIndex !== -1) {
+        targetIndex = playingIndex;
+    } else if (previousSelectedValue !== '' && playlist[previousSelectedValue]) {
+        targetIndex = parseInt(previousSelectedValue, 10);
+    }
+
+    // 選択状態を確定
+    filePathDisplay.value = targetIndex;
+
+    // 3. アイコン更新関数を使用して状態に応じたアイコン（▶️ / 🎤 / ⏹️）を反映
+    if (isPlaying && targetIndex !== -1) {
+        // 再生中
+        updatePlaylistDisplayIcons(targetIndex, 'play');
+    } else if (typeof isGenerating !== 'undefined' && isGenerating && targetIndex !== -1) {
+        // 生成中
+        updatePlaylistDisplayIcons(targetIndex, 'generate');
+    } else  {
+        // 停止中（選択中のパスに ⏹️ を設定）
+        updatePlaylistDisplayIcons(targetIndex, 'stop');
+    }
 }
 
 // トーストを非表示にする共通関数
@@ -2106,7 +2288,7 @@ function showToast(message, type = 'info', displayTime = 6000) {
     toastMessage.textContent = `${icon} ${message}`;
     toastMessage.classList.remove('hidden');
 
-    if (statusDiv) statusDiv.textContent = `${icon} ${message}`;
+    if (statusDisplay) statusDisplay.textContent = `${icon} ${message}`;
 
     // ★ 修正ポイント: 新しい表示に合わせて残時間と開始時間をリセット
     toastRemainingTime = displayTime;
@@ -2437,4 +2619,104 @@ function applyVolumeState(baseVol, isMuted) {
 
     // 状態の保存
     localStorageSetItemAndFile(STORAGE_KEYS.IS_MUTED, isMuted);
+}
+
+// プレイリスト内の特定アイテムの読み込み
+function loadPlaylistItem(index, isAutoPlay = false) {
+    if (index < 0 || index >= playlist.length) return;
+
+    const item = playlist[index];
+    filePathDisplay.value = index;
+
+    localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, index);
+    loadFileContent(item.path, item.content);
+
+    // 自動再生で次の曲/テキストに移る場合
+    if (isAutoPlay) {
+        playingIndex = index;
+        renderPlaylistUI();
+        filePathDisplay.value = index;
+        startPlayback(); // 既存の再生開始関数を呼出
+    } else {
+        playingIndex = index;
+        renderPlaylistUI();
+        filePathDisplay.value = index;
+    }
+}
+
+// 1つのテキスト再生完了時に呼び出すフック処理（順次再生用）
+function onCurrentTextEnded() {
+    // プレイリスト内に次のテキストが存在する場合
+    if (playingIndex !== -1 && playingIndex + 1 < playlist.length) {
+        const nextIndex = playingIndex + 1;
+        loadPlaylistItem(nextIndex, true);
+    } else {
+        // 全ファイルの再生完了
+        playingIndex = -1;
+        if (filePathDisplay && playlist.length > 0) {
+            filePathDisplay.value = 0;
+        }
+    }
+}
+
+// 複数ファイル読み込み・追加関数
+function addFilesToPlaylist(fileItems) {
+    // fileItems: [{ path: '...', content: '...' }, ...]
+    playlist = fileItems;
+    playingIndex = -1;
+
+    if (playlist.length > 0) {
+        loadPlaylistItem(0, false);
+    }
+}
+
+// 複数ファイル群をソートしてプレイリストに設定・画面読み込みする
+// @param {Array<{path: string, file: string, ext: string, createTime: Date|string, content: string}>} fileItems 
+function addFilesToPlaylist(fileItems) {
+    if (!fileItems || fileItems.length === 0) return;
+
+    // ★ renderer.js 側でファイルパス（またはファイル名）の昇順ソート
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    const sortedItems = [...fileItems].sort((a, b) => collator.compare(a.path, b.path));
+
+    playlist = sortedItems; // 各要素が { path, file, ext, createTime, content } を保持
+    playingIndex = -1;
+
+    // UI (プルダウン) の更新
+    renderPlaylistUI();
+
+    if (playlist.length > 0) {
+        loadPlaylistItem(0, false);
+    }
+}
+
+// プレイリストドロップダウンの表示テキスト（再生中・生成中・停止中アイコン）を更新する
+// @param {number} activeIndex - 対象のプレイリストインデックス (-1 の場合はアイコンなし)
+// @param {'play' | 'generate' | 'stop'} status - 状態 ('play': 再生中, 'generate': 生成中, 'stop': 停止中)
+function updatePlaylistDisplayIcons(activeIndex = -1, status = 'stop') {
+    if (!filePathDisplay || !playlist) return;
+
+    const options = filePathDisplay.options;
+
+    for (let i = 0; i < options.length; i++) {
+        const item = playlist[i];
+        if (!item) continue;
+
+        // 元のファイル名（またはパス）を取得
+        const rawText = item.path || `Item ${i + 1}`;
+
+        if (i === activeIndex) {
+            let prefix = '';
+            if (status === 'play') {
+                prefix = '▶️ ';
+            } else if (status === 'generate') {
+                prefix = '🎤 ';
+            } else if (status === 'stop') {
+                prefix = '⏹️ ';
+            }
+            options[i].textContent = `${prefix}${rawText}`;
+        } else {
+            options[i].textContent = rawText;
+        }
+    }
 }
