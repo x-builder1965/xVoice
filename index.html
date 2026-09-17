@@ -61,12 +61,13 @@
                     <select id="file-path-display" class="file-path-display" title="プレイリスト">
                         <option value="">選択されていません</option>
                     </select>
-                    <button id="btn-generate" class="btn-secondary" title="音声生成 (Ctrl+g)">🎤</button>
                     <button id="btn-ruby" class="btn-primary" title="読み編集 (Ctrl+r)">🖊️</button>
                     <button id="btn-unity" class="btn-primary" title="読み統一 (Ctrl+u)">🔠</button>
                     <button id="btn-search" class="btn-primary" title="編集検索 (Ctrl+g)">🔍</button>
+                    <div class="separator">　</div>
                     <button id="btn-save" class="btn-primary" title="テキスト保存 (Ctrl+s)">💾</button>
                     <button id="btn-playlist-save" class="btn-primary" title="プレイリスト保存 (Ctrl+l)">📚</button>
+                    <div class="separator">　</div>
                     <button id="btn-file-clear" class="file-select-btn" type="button" title="テキストクリア (Ctrl+c)">🗑️</button>
                 </div>
             </div>
@@ -76,16 +77,18 @@
                 <textarea id="text-input" placeholder="テキストを入力するか、ファイルを読み込んでください..."></textarea>
             </div>
 
-            <!-- 再生コントロール部（新規追加） -->
-            <div class="field">
-                <div class="controls-group">
-                    <button id="btn-speak" class="btn-primary" title="再生 (Ctrl+p)">▶️</button>
-                </div>
-            </div>
-
             <!-- ステータス・プログレスバー部分 -->
             <div class="field">
                 <div class="progress-wrapper">
+                    <!-- 再生・生成ボタン群 -->
+                    <button id="btn-prev-file" class="btn-primary" title="前ファイル (PgUp)">⏮️</button>
+                    <button id="btn-prev-line" class="btn-primary" title="前１０行 (Ctrl+,)">⏪</button>
+                    <button id="btn-speak" class="btn-primary" title="再生 (Ctrl+p)">▶️</button>
+                    <button id="btn-next-line" class="btn-primary" title="次１０行 (Ctrl+.)">⏩</button>
+                    <button id="btn-next-file" class="btn-primary" title="次ファイル (PgUp)">⏭️</button>
+                    <div class="separator">　</div>
+                    <button id="btn-generate" class="btn-secondary" title="音声生成 (Ctrl+g)">🎤</button>
+                    <div class="separator">　</div>
                     <!-- 音量コントロール群 -->
                     <button type="button" id="btn-mute" class="btn-mute" title="ミュート設定（Ctrl+m）">🔊</button>
                     <span id="volume-display" class="volume-display">  0%</span>

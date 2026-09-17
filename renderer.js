@@ -7,7 +7,7 @@
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
 // --- localStorage保存・復元用キー定数 ---
 const STORAGE_KEYS = {
-    PLAYLIST: 'xVoice_playlist',             // ★ FILE_PATH を廃止し PLAYLIST を追加
+    PLAYLIST: 'xVoice_playlist',
     PLAYLIST_INDEX: 'playlist_index',
     TEXT: 'xVoice_text',
     TEXT_BACKUP: 'xVoice_textBackup',
@@ -23,19 +23,23 @@ const STORAGE_KEYS = {
 };
 // ショートカットキーと各ボタンのIDのマッピング定義
 const shortcutMap = {
-    'ctrl+t': { control: 'btn-theme' },
-    'ctrl+d': { control: 'btn-folder-select' },
-    'ctrl+f': { control: 'btn-file-select' },
-    'ctrl+c': { control: 'btn-file-clear' },
-    'ctrl+n': { control: 'btn-connect' },
-    'ctrl+r': { control: 'btn-ruby' },
-    'ctrl+u': { control: 'btn-unity' },
-    'ctrl+v': { control: 'btn-search' },
-    'ctrl+s': { control: 'btn-save' },
-    'ctrl+l': { control: 'btn-playlist-save' },
-    'ctrl+p': { control: 'btn-speak' },
-    'ctrl+g': { control: 'btn-generate' },
-    'ctrl+m': { control: 'btn-mute' },
+    'ctrl+t':   { control: 'btn-theme' },
+    'ctrl+d':   { control: 'btn-folder-select' },
+    'ctrl+f':   { control: 'btn-file-select' },
+    'ctrl+c':   { control: 'btn-file-clear' },
+    'ctrl+n':   { control: 'btn-connect' },
+    'ctrl+r':   { control: 'btn-ruby' },
+    'ctrl+u':   { control: 'btn-unity' },
+    'ctrl+v':   { control: 'btn-search' },
+    'ctrl+s':   { control: 'btn-save' },
+    'ctrl+l':   { control: 'btn-playlist-save' },
+    'pageup':   { control: 'btn-prev-file' },
+    'ctrl+,':   { control: 'btn-prev-line' },
+    'ctrl+p':   { control: 'btn-speak' },
+    'ctrl+.':   { control: 'btn-next-line' },
+    'pagedown': { control: 'btn-next-file' },
+    'ctrl+g':   { control: 'btn-generate' },
+    'ctrl+m':   { control: 'btn-mute' },
 };
 // 編集中無効にするショートカットキー定義
 const disableKeyMap = new Set([
@@ -65,7 +69,11 @@ let btnRuby = null;              // ルビ（読み編集 ｛漢字｜よみ｝�
 let btnUnity = null;             // ルビの一括統一・整形ボタン
 let btnSearch = null;            // ルビ（読み編集）箇所検索ボタン
 let btnSave = null;              // 設定またはテキスト保存ボタン
+let btnPrevFile = null;          // 前ファイルボタン
+let btnPrevLine = null;          // 前１０行ボタン
 let btnSpeak = null;             // 音声再生 / 停止ボタン
+let btnNextLine = null;          // 次１０行ボタン
+let btnNextFile = null;          // 次ファイルボタン
 let btnGenerate = null;          // 音声ファイル（mp3）書き出しボタン
 let audioPlayer = null;          // メイン音声再生用 Audio 要素
 let audioPlayerNext = null;      // 次行の先行読み込み（ダブルバッファリング）用 Audio 要素
@@ -227,8 +235,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerBtnSaveClick();
     // 📚プレイリスト保存のクリックイベント
     registerBtnPlaylistSaveClick();
-    // ▶️再生／⏹️停止のクリックイベント
+    // ⏮️前ファイルのクリックイベント
+    registerBtnPrevFileClick();
+    // ⏪前１０行のクリックイベント
+    registerBtnPrevLineClick();
+    // ▶️再生／⏸️停止のクリックイベント
     registerBtnSpeakClick();
+    // ⏩次１０行のクリックイベント
+    registerBtnNextLineClick();
+    // ⏭️次ファイルのクリックイベント
+    registerBtnNextFileClick();
     // 🎤生成／中止のクリックイベント
     registerBtnGenerateClick();
     // 🔊／🔇音量バーの変更イベント
@@ -274,7 +290,11 @@ async function setupAllDomSettings() {
     btnUnity = document.getElementById('btn-unity');
     btnSearch = document.getElementById('btn-search');
     btnSave = document.getElementById('btn-save');
+    btnPrevFile = document.getElementById('btn-prev-file');
+    btnPrevLine = document.getElementById('btn-prev-line');
     btnSpeak = document.getElementById('btn-speak');
+    btnNextLine = document.getElementById('btn-next-line');
+    btnNextFile = document.getElementById('btn-next-file');
     btnGenerate = document.getElementById('btn-generate');
     audioPlayer = document.getElementById('audio-player');
     audioPlayerNext = document.getElementById('audio-player-next');
@@ -1373,12 +1393,106 @@ function registerBtnPlaylistSaveClick() {
     });
 }
 
-// ▶️再生／⏹️停止のクリックイベント
+// ⏮️ 前ファイルのクリックイベント
+function registerBtnPrevFileClick() {
+    btnPrevFile?.addEventListener('click', () => {
+        // プレイリスト未読み込み、または先頭ファイルの場合は移動しない
+        if (!playlist || playlist.length === 0 || playingIndex <= 0) {
+            return;
+        }
+
+        // 前のファイルへ移動して読み込み
+        playingIndex--;
+        const item = playlist[playingIndex];
+        filePathDisplay.value = playingIndex;
+
+        localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, playingIndex);
+        loadFileContent(item.path, item.content);
+
+        // 再生中の場合は前ファイルを再生
+        if (isPlaying) {
+            playLineByLine();
+        }
+    });
+}
+
+// ⏪ 前１０行のクリックイベント
+function registerBtnPrevLineClick() {
+    btnPrevLine?.addEventListener('click', () => {
+        const fullText = textInput.value.replace(/\r\n/g, '\n');
+        const lines = fullText.split('\n');
+        if (lines.length === 0) return;
+
+        // 現在のカーソル/再生位置から10行戻す (範囲外は先頭 0 へ制限)
+        let targetLine = (isPlaying ? currentLineIndex : getCursorLineIndex()) - 10;
+        if (targetLine < 0) {
+            targetLine = 0;
+        }
+
+        currentLineIndex = targetLine;
+        localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
+        moveCursorToLineStart(currentLineIndex, true);
+
+        // 再生中の場合は現在の行処理を割り込んでジャンプ
+        if (isPlaying) {
+            isLineJumped = true;
+        }
+    });
+}
+
+// ▶️再生／⏸️停止のクリックイベント
 function registerBtnSpeakClick() {
     btnSpeak?.addEventListener('click', () => {
         if (isPlaying) {
             stopPlayback();
         } else {
+            playLineByLine();
+        }
+    });
+}
+
+// ⏩ 次１0行のクリックイベント
+function registerBtnNextLineClick() {
+    btnNextLine?.addEventListener('click', () => {
+        const fullText = textInput.value.replace(/\r\n/g, '\n');
+        const lines = fullText.split('\n');
+        if (lines.length === 0) return;
+
+        // 現在のカーソル/再生位置から10行進める (範囲外は末尾 lines.length - 1 へ制限)
+        let targetLine = (isPlaying ? currentLineIndex : getCursorLineIndex()) + 10;
+        if (targetLine >= lines.length) {
+            targetLine = lines.length - 1;
+        }
+
+        currentLineIndex = targetLine;
+        localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
+        moveCursorToLineStart(currentLineIndex, true);
+
+        // 再生中の場合は現在の行処理を割り込んでジャンプ
+        if (isPlaying) {
+            isLineJumped = true;
+        }
+    });
+}
+
+// ⏭️ 次ファイルのクリックイベント
+function registerBtnNextFileClick() {
+    btnNextFile?.addEventListener('click', () => {
+        // プレイリスト未読み込み、または末尾ファイルの場合は移動しない
+        if (!playlist || playlist.length === 0 || playingIndex >= playlist.length - 1) {
+            return;
+        }
+
+        // 次のファイルへ移動して読み込み
+        playingIndex++;
+        const item = playlist[playingIndex];
+        filePathDisplay.value = playingIndex;
+
+        localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, playingIndex);
+        loadFileContent(item.path, item.content);
+
+        // 再生中の場合は次ファイルを再生
+        if (isPlaying) {
             playLineByLine();
         }
     });
@@ -1702,7 +1816,7 @@ function updateButtonStates(playing) {
 
     if (btnSpeak) {
         if (playing) {
-            btnSpeak.textContent = '⏹️';
+            btnSpeak.textContent = '⏸️';
             btnSpeak.title = '停止 (Ctrl+p)';
             btnSpeak.classList.add('play-active')
             textInput.style.cursor = 'pointer';
@@ -1740,7 +1854,11 @@ function resetGenerateButton() {
     }
     if (speakerSelect) speakerSelect.disabled = false;
     if (btnConnect) btnConnect.disabled = false;
+    if (btnPrevFile) btnPrevFile.disabled = false;
+    if (btnPrevLine) btnPrevLine.disabled = false;
     if (btnSpeak) btnSpeak.disabled = !isEngineReady;
+    if (btnNextLine) btnNextLine.disabled = false;
+    if (btnNextFile) btnNextFile.disabled = false;
     if (btnFileSelect) btnFileSelect.disabled = false;
     if (btnFileClear) btnFileClear.disabled = false;
     if (fontSizeSelect) fontSizeSelect.disabled = false;
@@ -1817,7 +1935,7 @@ function stopPlayback() {
 
     if (statusDisplay) statusDisplay.textContent = `停止しました (${currentLineIndex + 1} 行目で停止中)`;
 
-    // ★ 停止処理: isPlaying フラグ・playingIndex をリセットし、アイコンを ⏹️ に戻す
+    // ★ 停止処理: isPlaying フラグ・playingIndex をリセットし、アイコンを ⏸️ に戻す
     isPlaying = false;
     playingIndex = -1;
     updateButtonStates(false);
@@ -1986,13 +2104,31 @@ async function playLineByLine() {
         clearAudioCache(); // 最後まで再生しきった場合のみクリア
         currentLineIndex = 0;
         localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, 0);
-        showToast('再生完了');
+
+        // ★ プレイリストに次のテキストが存在するか判定
+        // ※ 変数名（playlist, currentPlaylistIndex, loadPlaylistItem など）は環境に合わせて調整してください
+        const nextIndex = playingIndex + 1;
+
+        if (playlist && nextIndex < playlist.length) {
+            // 次のプレイリスト項目が存在する場合: 選択状態を更新して連続再生
+            playingIndex = nextIndex;
+            loadPlaylistItem(nextIndex); // 次のテキストの読み込み処理（UI反映等）
+            
+            // 少しの間隔を空けて次の再生を開始（不要であれば setImmediate や直接呼び出しでも可）
+            setTimeout(() => {
+                playLineByLine();
+            }, 300);
+            return; // 次の再生に遷移するため、ここでの状態リセット処理を回避
+        } else {
+            showToast('プレイリストの再生がすべて完了しました');
+        }
+
         if (textBufferProgressBar) textBufferProgressBar.value = 0;
         showProgressBar('text');
         moveCursorToLineStart(0, true);
     }
 
-    // ★ 再生終了/完了: isPlaying フラグ・playingIndex をリセットし、アイコンを ⏹️ に戻す
+    // ★ 中途停止時、またはプレイリストの最後まで到達した場合の後処理
     isPlaying = false;
     playingIndex = -1;
     updateButtonStates(false);
@@ -2029,17 +2165,23 @@ async function generateFullTextMp3() {
     btnGenerate.classList.add('generate-active');
     btnGenerate.title = '生成中止 (Ctrl+g)';
     btnGenerate.disabled = false;
+    btnPrevFile.disabled = true;
+    btnPrevLine.disabled = true;
     btnSpeak.disabled = true;
-    if (speakerSelect) speakerSelect.disabled = true;
-    if (btnConnect) btnConnect.disabled = true;
-    if (btnFileSelect) btnFileSelect.disabled = true;
-    if (btnFileClear) btnFileClear.disabled = true;
-    if (fontSizeSelect) fontSizeSelect.disabled = true;
-    if (writingModeSelect) writingModeSelect.disabled = true;
-    if (textInput) textInput.readOnly = true;
+    btnNextLine.disabled = true;
+    btnNextFile.disabled = true;
+    speakerSelect.disabled = true;
+    btnConnect.disabled = true;
+    btnFileSelect.disabled = true;
+    btnFileClear.disabled = true;
+    fontSizeSelect.disabled = true;
+    writingModeSelect.disabled = true;
+    textInput.readOnly = true;
 
     showProgressBar('mp3');
     if (mp3ProgressBar) mp3ProgressBar.value = 0;
+
+    let isCompletedSuccessfully = false;
 
     try {
         const audioBuffers = [];
@@ -2075,8 +2217,9 @@ async function generateFullTextMp3() {
         if (statusDisplay) statusDisplay.textContent = '合成音声（mp3）を生成中...';
 
         let defaultFilename = 'xVoice生成.mp3';
-        const currentIndex = parseInt(localSettings[STORAGE_KEYS.PLAYLIST_INDEX], 10);
-        const currentItem = playlist[currentIndex];
+        // playingIndex を元に現在の項目を取得（保存時は localStorage または playingIndex を使用）
+        const currentIndex = playingIndex >= 0 ? playingIndex : parseInt(localSettings[STORAGE_KEYS.PLAYLIST_INDEX], 10);
+        const currentItem = playlist ? playlist[currentIndex] : null;
         
         if (currentItem && currentItem.path) {
             const parts = currentItem.path.split(/[/\\]/);
@@ -2094,6 +2237,7 @@ async function generateFullTextMp3() {
         const success = await window.api.generateAudio(audioBuffers, defaultFilename);
         if (success) {
             showToast('生成が完了しました');
+            isCompletedSuccessfully = true; // 正常完了フラグをセット
         } else {
             showToast('生成がキャンセルまたは失敗しました', 'error');
         }
@@ -2103,14 +2247,34 @@ async function generateFullTextMp3() {
         showProgressBar('text');
         console.error(err);
     } finally {
-        // ★ 生成完了/中止/エラー時: isGenerating フラグを解除し、アイコンを ⏹️ に戻す
-        isGenerating = false;
-        resetGenerateButton();
-        renderPlaylistUI();
+        // 中止された場合や最後のファイル生成が終わった場合は各種状態をリセット
+        const nextIndex = playingIndex + 1;
+        const hasNext = isCompletedSuccessfully && !isGenerateCanceled && playlist && nextIndex < playlist.length;
 
-        setTimeout(() => {
-            if (mp3ProgressBar) mp3ProgressBar.hidden = true;
-        }, 1500);
+        if (hasNext) {
+            // ★ 次のプレイリストテキストが存在する場合: 自動遷移して生成を継続
+            playingIndex = nextIndex;
+            localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, nextIndex);
+            
+            // 次のプレイリスト項目のテキスト読み込み処理（環境に合わせて実装関数を呼び出し）
+            if (typeof loadPlaylistItem === 'function') {
+                await loadPlaylistItem(nextIndex);
+            }
+
+            // 少し間隔を空けて次のテキストの自動生成を開始
+            setTimeout(() => {
+                generateFullTextMp3();
+            }, 500);
+        } else {
+            // ★ 最後の項目まで生成が完了したか、中止・エラーが発生した場合のリセット処理
+            isGenerating = false;
+            resetGenerateButton();
+            renderPlaylistUI();
+
+            setTimeout(() => {
+                if (mp3ProgressBar) mp3ProgressBar.hidden = true;
+            }, 1500);
+        }
     }
 }
 
@@ -2204,7 +2368,7 @@ function scrollTextareaToCharOffset(textarea, charIndex) {
     }
 }
 
-// プレイリスト (select) の表示を更新し、状態に応じたアイコン（▶️ / 🎤 / ⏹️）を反映する
+// プレイリスト (select) の表示を更新し、状態に応じたアイコン（▶️ / 🎤 / ⏸️）を反映する
 function renderPlaylistUI() {
     if (!filePathDisplay) return;
 
@@ -2240,7 +2404,7 @@ function renderPlaylistUI() {
     // 選択状態を確定
     filePathDisplay.value = targetIndex;
 
-    // 3. アイコン更新関数を使用して状態に応じたアイコン（▶️ / 🎤 / ⏹️）を反映
+    // 3. アイコン更新関数を使用して状態に応じたアイコン（▶️ / 🎤 / ⏸️）を反映
     if (isPlaying && targetIndex !== -1) {
         // 再生中
         updatePlaylistDisplayIcons(targetIndex, 'play');
@@ -2248,7 +2412,7 @@ function renderPlaylistUI() {
         // 生成中
         updatePlaylistDisplayIcons(targetIndex, 'generate');
     } else  {
-        // 停止中（選択中のパスに ⏹️ を設定）
+        // 停止中（選択中のパスに ⏸️ を設定）
         updatePlaylistDisplayIcons(targetIndex, 'stop');
     }
 }
@@ -2712,11 +2876,29 @@ function updatePlaylistDisplayIcons(activeIndex = -1, status = 'stop') {
             } else if (status === 'generate') {
                 prefix = '🎤 ';
             } else if (status === 'stop') {
-                prefix = '⏹️ ';
+                prefix = '⏸️ ';
             }
             options[i].textContent = `${prefix}${rawText}`;
         } else {
             options[i].textContent = rawText;
         }
+    }
+}
+
+// ボタンの有効/無効状態を更新する補助関数（必要に応じて組み込み）
+function updatePlaylistControlButtons() {
+    if (!playlist || playlist.length === 0) {
+        if (btnPrevFile) btnPrevFile.disabled = true;
+        if (btnNextFile) btnNextFile.disabled = true;
+        return;
+    }
+
+    // 先頭ファイルでは前ファイルボタンを無効化
+    if (btnPrevFile) {
+        btnPrevFile.disabled = (playingIndex <= 0);
+    }
+    // 末尾ファイルでは次ファイルボタンを無効化
+    if (btnNextFile) {
+        btnNextFile.disabled = (playingIndex >= playlist.length - 1);
     }
 }

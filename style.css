@@ -94,6 +94,10 @@ body {
     transition: background-color 0.3s, color 0.3s;
 }
 
+.separator {
+    gap: 2px;
+}
+
 /* コンテナを画面いっぱいに広げる設定 */
 .container,
 .main-container {
@@ -273,7 +277,7 @@ audio {
 
 .file-input-group {
     display: flex;
-    gap: 8px;
+    gap: 2px;
     align-items: center;
 }
 
@@ -786,7 +790,7 @@ caption {
 .progress-wrapper {
     display: flex;
     align-items: center;
-    gap: 8px; /* 各要素間の余白 */
+    gap: 2px; /* 各要素間の余白 */
 }
 .progress-count,
 .cache-count-display {
