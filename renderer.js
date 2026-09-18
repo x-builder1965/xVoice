@@ -1030,6 +1030,22 @@ function registerTextInputClick() {
 // 📁 フォルダ選択のクリックイベント
 function registerBtnFolderSelectClick() {
     btnFolderSelect?.addEventListener('click', async () => {
+        // ★ テキスト変更チェック & 保存ダイアログ表示
+        const currentText = textInput ? textInput.value : '';
+        if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
+            const selectedIndex = parseInt(filePathDisplay?.value, 10);
+            const currentItem = playlist[selectedIndex];
+            const rawPath = currentItem ? currentItem.path : '';
+            const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
+            try {
+                // 保存完了（ダイアログの「保存」「キャンセル」いずれの操作完了）まで処理を待機
+                await window.api.saveTextFile(textInput.value, currentPath);
+            } catch (error) {
+                // 保存失敗やキャンセル等の例外が発生しても処理を中断させない
+                console.warn('保存処理をスキップまたはキャンセルしました:', error);
+            }
+        }
+
         const fileDataList = await window.api.selectFolder();
         
         // キャンセルまたは該当ファイルがない場合
@@ -1053,6 +1069,22 @@ function registerBtnFolderSelectClick() {
 // 🗒️ファイル選択のクリックイベント
 function registerBtnFileSelectClick() {
     btnFileSelect?.addEventListener('click', async () => {
+        // ★ テキスト変更チェック & 保存ダイアログ表示
+        const currentText = textInput ? textInput.value : '';
+        if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
+            const selectedIndex = parseInt(filePathDisplay?.value, 10);
+            const currentItem = playlist[selectedIndex];
+            const rawPath = currentItem ? currentItem.path : '';
+            const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
+            try {
+                // 保存完了（ダイアログの「保存」「キャンセル」いずれの操作完了）まで処理を待機
+                await window.api.saveTextFile(textInput.value, currentPath);
+            } catch (error) {
+                // 保存失敗やキャンセル等の例外が発生しても処理を中断させない
+                console.warn('保存処理をスキップまたはキャンセルしました:', error);
+            }
+        }
+
         const fileDataList = await window.api.selectFile();
         if (!fileDataList || fileDataList.length === 0) return;
 
@@ -1070,7 +1102,23 @@ function registerBtnFileSelectClick() {
 
 // 🗑️クリアのクリックイベント
 function registerBtnFileClearClick() {
-    btnFileClear?.addEventListener('click', () => {
+    btnFileClear?.addEventListener('click', async () => {
+        // ★ テキスト変更チェック & 保存ダイアログ表示
+        const currentText = textInput ? textInput.value : '';
+        if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
+            const selectedIndex = parseInt(filePathDisplay?.value, 10);
+            const currentItem = playlist[selectedIndex];
+            const rawPath = currentItem ? currentItem.path : '';
+            const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
+            try {
+                // 保存完了（ダイアログの「保存」「キャンセル」いずれの操作完了）まで処理を待機
+                await window.api.saveTextFile(textInput.value, currentPath);
+            } catch (error) {
+                // 保存失敗やキャンセル等の例外が発生しても処理を中断させない
+                console.warn('保存処理をスキップまたはキャンセルしました:', error);
+            }
+        }
+
         playlist = [];
         playingIndex = -1;
 
