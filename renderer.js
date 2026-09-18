@@ -655,6 +655,8 @@ function registerWindowResize() {
 // アプリ終了前のイベント
 function registerWindowApiOnAppCloseRequest() {
     window.api?.onAppCloseRequest(async () => {
+        // 一旦無効化（localSturageに保持しているため改めて保存は不要）
+        /*
         // ★ テキスト変更チェック & 保存ダイアログ表示
         const currentText = textInput ? textInput.value : '';
         if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
@@ -671,7 +673,7 @@ function registerWindowApiOnAppCloseRequest() {
                 console.warn('保存処理をスキップまたはキャンセルしました:', error);
             }
         }
-
+        */
         // 保存処理（またはキャンセル）が完全に完了したらメインへ通知してウィンドウを閉じる
         await window.api.confirmReadyToClose();
     });
