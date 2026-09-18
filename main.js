@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.46.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.47.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -25,6 +25,7 @@ let mainWindow = null;
 // 本アプリ経由でエンジンを起動したかを管理するフラグ
 let isEngineSpawnedByApp = false;
 let isSecondaryInstance = false;    // 二重起動（多重起動）判定フラグ（true の場合はセカニアリインスタンスとして動作）
+let isQuittingFromRenderer = false; // Renderer側の保存完了フラグ
 
 // 🔲初期設定🔲
 // 初回起動判定
@@ -443,10 +444,28 @@ function createWindow() {
         },
         icon: path.join(__dirname, 'xVoice.ico'),
         autoHideMenuBar: true,
-        show: false // ちらつき防止
+        show: false
     });
 
-    // --- ★デバッガ・アタッチ待ち対応★ ---
+    // ★ ウィンドウ閉じる直前の IPC 通信制御 ★
+    mainWindow.on('close', (e) => {
+        // Renderer 側からの最終完了通知でない場合は一度閉じ処理をブロック
+        if (!isQuittingFromRenderer) {
+            e.preventDefault();
+            // Renderer 側に終了準備イベントを送信
+            mainWindow.webContents.send('app-close-request');
+        }
+    });
+
+    // ★ 準備完了後の閉じる要求ハンドラー ★
+    ipcMain.handle('ready-to-close-app', () => {
+        isQuittingFromRenderer = true;
+        if (mainWindow) {
+            mainWindow.close();
+        }
+    });
+
+    // (既存の loadApp 周りの処理...)
     let isLoaded = false;
     const loadApp = () => {
         if (!isLoaded) {
@@ -456,31 +475,16 @@ function createWindow() {
         }
     };
 
-    // 開発パッケージ未構成時またはデバッグ用の処理
     if (!app.isPackaged) {
-        // DevToolsが開かれたらロードを開始（アタッチ完了を保証）
-        mainWindow.webContents.once('devtools-opened', () => {
-            loadApp();
-        });
-
-        // 自動的にDevToolsを開く
+        mainWindow.webContents.once('devtools-opened', () => loadApp());
         mainWindow.webContents.openDevTools();
-
-        // 万が一DevToolsが開かなくても1秒後にはフォールバックでロード
-        setTimeout(() => {
-            loadApp();
-        }, 1000);
+        setTimeout(() => loadApp(), 1000);
     } else {
-        // 本番ビルド時は直接ロード
         loadApp();
     }
-    // --------------------------------------
     
     mainWindow.maximize();
-
-    mainWindow.once('ready-to-show', () => {
-        mainWindow.show();
-    });
+    mainWindow.once('ready-to-show', () => mainWindow.show());
 
     return mainWindow;
 }

@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.46.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.47.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -28,14 +28,14 @@ const shortcutMap = {
     'ctrl+f':   { control: 'btn-file-select' },
     'ctrl+c':   { control: 'btn-file-clear' },
     'ctrl+n':   { control: 'btn-connect' },
-    'ctrl+r':   { control: 'btn-ruby' },
+    'ctrl+h':   { control: 'btn-ruby' },
     'ctrl+u':   { control: 'btn-unity' },
-    'ctrl+v':   { control: 'btn-search' },
+    'ctrl+a':   { control: 'btn-search' },
     'ctrl+s':   { control: 'btn-save' },
     'ctrl+l':   { control: 'btn-playlist-save' },
     'pageup':   { control: 'btn-prev-file' },
     'ctrl+,':   { control: 'btn-prev-line' },
-    'ctrl+p':   { control: 'btn-speak' },
+    'ctrl+ ':   { control: 'btn-speak' },
     'ctrl+.':   { control: 'btn-next-line' },
     'pagedown': { control: 'btn-next-file' },
     'ctrl+g':   { control: 'btn-generate' },
@@ -127,6 +127,7 @@ let toastTimer = null;           // トースト表示タイマーID
 let toastRemainingTime = 0;      // トースト一時停止時の残り表示時間
 let toastStartTime = 0;          // トースト表示開始タイムスタンプ
 let isPrefetching = false;       // ループ重複実行防止フラグ
+let playSessionId = 0;           // ★ セッション管理用ID（競合防止）
 
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲初期設定🔲
@@ -173,6 +174,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 🔲window イベントリスナー登録🔲
     // 画面のサイズ変更イベント
     registerWindowResize();
+    // アプリ終了前のイベント
+    registerWindowApiOnAppCloseRequest();
 
     // 🔲documentイベントリスナー登録🔲
     // ドキュメントのキーダウンイベント
@@ -649,6 +652,31 @@ function registerWindowResize() {
     });
 }
 
+// アプリ終了前のイベント
+function registerWindowApiOnAppCloseRequest() {
+    window.api?.onAppCloseRequest(async () => {
+        // ★ テキスト変更チェック & 保存ダイアログ表示
+        const currentText = textInput ? textInput.value : '';
+        if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
+            const selectedIndex = parseInt(filePathDisplay?.value, 10);
+            const currentItem = playlist ? playlist[selectedIndex] : null;
+            const rawPath = currentItem ? currentItem.path : '';
+            const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
+
+            try {
+                // 保存完了（ダイアログの「保存」「キャンセル」いずれの操作完了）まで処理を待機
+                await window.api.saveTextFile(textInput.value, currentPath);
+            } catch (error) {
+                // 保存失敗やキャンセル等の例外が発生しても処理を中断させない
+                console.warn('保存処理をスキップまたはキャンセルしました:', error);
+            }
+        }
+
+        // 保存処理（またはキャンセル）が完全に完了したらメインへ通知してウィンドウを閉じる
+        await window.api.confirmReadyToClose();
+    });
+}
+
 // 🔲documentイベントリスナー登録🔲
 // ドキュメントのキーダウンイベント
 function registerDocumentKeydown() {
@@ -670,7 +698,7 @@ function registerDocumentKeydown() {
     
         modifiers.push(mainKey);
     
-        // 'ctrl+s' のような文字列を生成
+        // 'ctrl+ ' のような文字列を生成 (スペースキーは ' ')
         const shortcutKey = modifiers.join('+');
     
         // textInput（あるいは入力エリア全般）のフォーカス判定
@@ -695,7 +723,7 @@ function registerDocumentKeydown() {
             // コントロール名（ボタンID）の取得と実行
             const btn = document.getElementById(shortcutConfig.control);
             if (btn) {
-                e.preventDefault(); // ブラウザ標準動作のキャンセル
+                e.preventDefault(); // スペース入力やブラウザ標準動作のキャンセル
                 btn.click();        // ボタンクリックを実行
             }
         }
@@ -966,16 +994,17 @@ function registerBtnThemeClick() {
     });
 }
 
-// プレイリストの変更いベント
-function registerFilePathDisplayChange() {
-    filePathDisplay?.addEventListener('change', (e) => {
+// プレイリストの変更イベント
+async function registerFilePathDisplayChange() {
+    filePathDisplay?.addEventListener('change', async (e) => {
+        // ダイアログの成否・「保存/キャンセル」に関係なく以降の読み込み処理を実行
         const selectedIndex = parseInt(e.target.value, 10);
         if (!isNaN(selectedIndex) && playlist[selectedIndex]) {
             if (isPlaying) {
                 stopPlayback();
             }
             playingIndex = -1;
-            loadPlaylistItem(selectedIndex, false);
+            await loadPlaylistItem(selectedIndex, false);
 
             // ★ 選択された Index を localStorage に保存
             localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, selectedIndex);
@@ -1268,6 +1297,20 @@ function registerBtnUnityClick() {
         // テキストの更新とイベント発火
         textInput.value = newText;
         textInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+        // --------------------------------------------------
+        // ★ カーソル位置の復元および元の行のハイライト処理
+        // --------------------------------------------------
+        // 1. 元のカーソル位置が含まれる行の開始位置と終了位置を計算
+        /* const lineStart = newText.lastIndexOf('\n', cursorPos - 1) + 1;
+        let lineEnd = newText.indexOf('\n', cursorPos);
+        if (lineEnd === -1) {
+            lineEnd = newText.length;
+        } */
+
+        // 2. 要素へフォーカスを当て、該当行を選択（ハイライト表示）
+        textInput.focus();
+        textInput.setSelectionRange(cursorPos, cursorPos);
     
         // 3. 置き換え完了
         showToast(`${replaceCount}件の読み統一が完了しました`, 'info');
@@ -1788,7 +1831,23 @@ function handleCursorChange() {
 }
 
 // テキストパス・テキスト反映
-function loadFileContent(path, content) {
+async function loadFileContent(path, content) {
+    // ★ テキスト変更チェック & 保存ダイアログ表示
+    const currentText = textInput ? textInput.value : '';
+    if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        const currentItem = playlist[selectedIndex];
+        const rawPath = currentItem ? currentItem.path : '';
+        const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
+        try {
+            // 保存完了（ダイアログの「保存」「キャンセル」いずれの操作完了）まで処理を待機
+            await window.api.saveTextFile(textInput.value, currentPath);
+        } catch (error) {
+            // 保存失敗やキャンセル等の例外が発生しても処理を中断させない
+            console.warn('保存処理をスキップまたはキャンセルしました:', error);
+        }
+    }
+
     const loadedText = (content || '').replace(/\r\n/g, '\n');
 
     if (textInput) textInput.value = loadedText;
@@ -1836,8 +1895,8 @@ function updateButtonStates(playing) {
     if (btnFileClear) btnFileClear.disabled = playing || isGenerating;
     if (btnFolderSelect) btnFolderSelect.disabled = playing || isGenerating;
     if (btnFileSelect) btnFileSelect.disabled = playing || isGenerating;
-    if (fontSizeSelect) fontSizeSelect.disabled = playing || isGenerating;
-    if (writingModeSelect) writingModeSelect.disabled = playing || isGenerating;
+    // if (fontSizeSelect) fontSizeSelect.disabled = playing || isGenerating;
+    // if (writingModeSelect) writingModeSelect.disabled = playing || isGenerating;
     if (textInput) textInput.readOnly = playing || isGenerating;
 
     renderPlaylistUI();
@@ -1863,8 +1922,8 @@ function resetGenerateButton() {
     if (btnFileSelect) btnFileSelect.disabled = false;
     if (btnFolderSelect) btnFolderSelect.disabled = false;
     if (btnFileClear) btnFileClear.disabled = false;
-    if (fontSizeSelect) fontSizeSelect.disabled = false;
-    if (writingModeSelect) writingModeSelect.disabled = false;
+    // if (fontSizeSelect) fontSizeSelect.disabled = false;
+    // if (writingModeSelect) writingModeSelect.disabled = false;
     if (textInput) textInput.readOnly = false;
 }
 
@@ -1932,12 +1991,15 @@ async function fetchAudioBuffer(text, speakerId) {
 function stopPlayback() {
     if (!isPlaying) return;
 
+    // ★ セッションIDを更新して実行中の playLineByLine の制御権を無効化
+    playSessionId++;
+
     isStopped = true;
     stopAllAudioPlayers();
 
     if (statusDisplay) statusDisplay.textContent = `停止しました (${currentLineIndex + 1} 行目で停止中)`;
 
-    // ★ 停止処理: isPlaying フラグ・playingIndex をリセットし、アイコンを ⏸️ に戻す
+    // 停止処理: isPlaying フラグ・playingIndex をリセット
     isPlaying = false;
     playingIndex = -1;
     updateButtonStates(false);
@@ -1946,20 +2008,34 @@ function stopPlayback() {
     moveCursorToLineStart(currentLineIndex, true);
 }
 
-// 1行再生処理 (行単位読み上げ)
-async function playLineByLine() {
+// 引数 fromStart を追加（デフォルトは false：カーソル位置から開始）
+async function playLineByLine(fromStart = false) {
+    // ★ 自身のセッションIDを発行して保持
+    const currentSession = ++playSessionId;
+
+    // --- 【追加・修正箇所】 ---
+    // playingIndex が -1 の場合、filePathDisplay または localStorage から現在のインデックスを復元する
+    if (playingIndex === -1) {
+        if (filePathDisplay && filePathDisplay.value !== '') {
+            playingIndex = parseInt(filePathDisplay.value, 10);
+        } else {
+            const savedIndex = parseInt(localSettings[STORAGE_KEYS.PLAYLIST_INDEX], 10);
+            playingIndex = (!isNaN(savedIndex) && savedIndex >= 0) ? savedIndex : 0;
+        }
+    }
+
     const fullText = textInput.value.replace(/\r\n/g, '\n');
     const lines = fullText.split('\n');
 
     if (!fullText.trim()) return showToast('テキストを入力してください', 'warning');
 
-    // 前回再生時とテキストが異なっていればクリア（万一イベントで拾えなかった場合の保険）
     if (previousText !== fullText) {
         clearAudioCache();
         previousText = fullText;
     }
 
-    currentLineIndex = getCursorLineIndex();
+    // fromStart が true の場合は強制的に 0、そうでなければカーソル位置を取得
+    currentLineIndex = fromStart ? 0 : getCursorLineIndex();
     localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
 
     isFirstPlay = false;
@@ -1973,12 +2049,11 @@ async function playLineByLine() {
     isStopped = false;
     isLineJumped = false;
 
-    // ★ 再生開始: isPlaying フラグを更新し、アイコンを ▶️ に変更
     isPlaying = true;
     renderPlaylistUI();
 
     stopAllAudioPlayers();
-    
+
     const currentSpeakerId = speakerSelect.value;
 
     showProgressBar('text');
@@ -1986,14 +2061,14 @@ async function playLineByLine() {
     if (textProgressBar) textProgressBar.value = initialPercent;
     if (textBufferProgressBar) textBufferProgressBar.value = initialPercent;
 
-    // 先読みの実行（キャッシュにあるものはスキップするよう triggerPrefetch 側で制御を推薦）
     triggerPrefetch(lines, currentSpeakerId);
 
     const players = [audioPlayer, audioPlayerNext];
     let activePlayerIndex = 0;
 
     while (currentLineIndex < lines.length) {
-        if (isStopped) break;
+        // ★ 他の停止・再再生によってセッションが変わっていたらループ中断
+        if (isStopped || currentSession !== playSessionId) break;
 
         const i = currentLineIndex;
         localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, i);
@@ -2013,24 +2088,20 @@ async function playLineByLine() {
             try {
                 let audioData;
                 
-                // キャッシュの存在確認（見つかれば再利用）
                 if (audioCache.has(i)) {
                     audioData = audioCache.get(i);
                 } else {
-                    // ★ リクエスト送信前にローディング表示
                     showLoading(true);
                     try {
                         audioData = await fetchAudioBuffer(lineTrimmed, currentSpeakerId);
-                        // ※ fetchAudioBuffer 内で audioCache.set(i, audioData) されている前提
                     } finally {
-                        // ★ レスポンス受領後（成功・失敗問わず）にローディング非表示
                         showLoading(false);
                     }
                 }
 
                 triggerPrefetch(lines, currentSpeakerId);
 
-                if (isStopped || isLineJumped) {
+                if (isStopped || isLineJumped || currentSession !== playSessionId) {
                     if (isLineJumped) {
                         isLineJumped = false;
                         clearAudioCache();
@@ -2043,7 +2114,7 @@ async function playLineByLine() {
 
                 const currentPlayer = players[activePlayerIndex];
                 const blob = new Blob([audioData], { type: 'audio/wav' });
-                const blobUrl = URL.createObjectURL(blob);
+                const blobUrl = URL.revokeObjectURL ? URL.createObjectURL(blob) : URL.createObjectURL(blob);
 
                 currentPlayer.src = blobUrl;
 
@@ -2059,7 +2130,8 @@ async function playLineByLine() {
 
                 await new Promise((resolve) => {
                     const checkStopped = setInterval(() => {
-                        if (isStopped || isLineJumped) {
+                        // ★ セッションが変更された場合も即座に監視を解除して抜ける
+                        if (isStopped || isLineJumped || currentSession !== playSessionId) {
                             clearInterval(checkStopped);
                             resolve();
                         }
@@ -2099,28 +2171,33 @@ async function playLineByLine() {
         currentLineIndex++;
     }
 
+    // ★ 古いセッションの遅延処理であれば、以降の後処理（playingIndex = -1等）を実行せずに静かに終了する
+    if (currentSession !== playSessionId) {
+        return;
+    }
+
     // 後処理
     stopAllAudioPlayers();
 
     if (!isStopped && !isLineJumped) {
-        clearAudioCache(); // 最後まで再生しきった場合のみクリア
+        clearAudioCache();
         currentLineIndex = 0;
         localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, 0);
 
-        // ★ プレイリストに次のテキストが存在するか判定
-        // ※ 変数名（playlist, currentPlaylistIndex, loadPlaylistItem など）は環境に合わせて調整してください
         const nextIndex = playingIndex + 1;
 
         if (playlist && nextIndex < playlist.length) {
-            // 次のプレイリスト項目が存在する場合: 選択状態を更新して連続再生
             playingIndex = nextIndex;
-            loadPlaylistItem(nextIndex); // 次のテキストの読み込み処理（UI反映等）
             
-            // 少しの間隔を空けて次の再生を開始（不要であれば setImmediate や直接呼び出しでも可）
-            setTimeout(() => {
-                playLineByLine();
-            }, 300);
-            return; // 次の再生に遷移するため、ここでの状態リセット処理を回避
+            // 確実にファイル読み込み完了を待機
+            await loadPlaylistItem(nextIndex); 
+            
+            // ★ loadPlaylistItem 完了時にセッションが変わっていなければ次のトラックへ
+            if (currentSession === playSessionId) {
+                return playLineByLine(true); 
+            } else {
+                return;
+            }
         } else {
             showToast('プレイリストの再生がすべて完了しました');
         }
@@ -2130,7 +2207,7 @@ async function playLineByLine() {
         moveCursorToLineStart(0, true);
     }
 
-    // ★ 中途停止時、またはプレイリストの最後まで到達した場合の後処理
+    // 手動停止時、または全リスト再生完了時のみ状態リセット
     isPlaying = false;
     playingIndex = -1;
     updateButtonStates(false);
@@ -2177,8 +2254,8 @@ async function generateFullTextMp3() {
     if (btnFolderSelect) btnFolderSelect.disabled = true;
     if (btnFileSelect) btnFileSelect.disabled = true;
     if (btnFileClear) btnFileClear.disabled = true;
-    if (fontSizeSelect) fontSizeSelect.disabled = true;
-    if (writingModeSelect) writingModeSelect.disabled = true;
+    // if (fontSizeSelect) fontSizeSelect.disabled = true;
+    // if (writingModeSelect) writingModeSelect.disabled = true;
     if (textInput) textInput.readOnly = true;
 
     showProgressBar('mp3');
@@ -2371,6 +2448,28 @@ function scrollTextareaToCharOffset(textarea, charIndex) {
     }
 }
 
+// パスから「最後のフォルダ名\拡張子なしのファイル名」を抽出するヘルパー関数
+function getShortPath(fullPath) {
+    if (!fullPath) return '';
+
+    // スラッシュ(/)とバックスラッシュ(\)の表記ゆれを標準化
+    const normalizedPath = fullPath.replace(/\//g, '\\');
+    const parts = normalizedPath.split('\\').filter(Boolean);
+
+    if (parts.length === 0) return fullPath;
+
+    // ファイル名（最後の要素）と拡張子の除去
+    const fileNameWithExt = parts.pop();
+    const fileName = fileNameWithExt.replace(/\.[^/.]+$/, '');
+
+    // 親フォルダが存在する場合は「親フォルダ名\ファイル名」、無ければ「ファイル名」のみ
+    if (parts.length > 0) {
+        const folderName = parts.pop();
+        return `${folderName}\\${fileName}`;
+    }
+    return fileName;
+}
+
 // プレイリスト (select) の表示を更新し、状態に応じたアイコン（▶️ / 🎤 / ⏸️）を反映する
 function renderPlaylistUI() {
     if (!filePathDisplay) return;
@@ -2388,11 +2487,15 @@ function renderPlaylistUI() {
         return;
     }
 
-    // 1. 基本となる option 要素を生成（アイコンなしの純粋なパスを設定）
+    // 1. 基本となる option 要素を生成（アイコンなしの短いパスを設定）
     playlist.forEach((item, index) => {
         const option = document.createElement('option');
         option.value = index;
-        option.textContent = item.path || `Item ${index + 1}`;
+        
+        // フルパスから「最後のフォルダ\拡張子なしのファイル名」に変換して設定
+        const rawPath = item.path || `Item ${index + 1}`;
+        option.textContent = item.path ? getShortPath(item.path) : rawPath;
+        
         filePathDisplay.appendChild(option);
     });
 
@@ -2789,34 +2892,31 @@ function applyVolumeState(baseVol, isMuted) {
 }
 
 // プレイリスト内の特定アイテムの読み込み
-function loadPlaylistItem(index, isAutoPlay = false) {
+async function loadPlaylistItem(index, isAutoPlay = false) {
     if (index < 0 || index >= playlist.length) return;
 
     const item = playlist[index];
     filePathDisplay.value = index;
 
     localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, index);
-    loadFileContent(item.path, item.content);
+    await loadFileContent(item.path, item.content);
 
-    // 自動再生で次の曲/テキストに移る場合
+    playingIndex = index;
+    renderPlaylistUI();
+    filePathDisplay.value = index;
+
+    // 自動再生指示がある場合
     if (isAutoPlay) {
-        playingIndex = index;
-        renderPlaylistUI();
-        filePathDisplay.value = index;
         startPlayback(); // 既存の再生開始関数を呼出
-    } else {
-        playingIndex = index;
-        renderPlaylistUI();
-        filePathDisplay.value = index;
     }
 }
 
 // 1つのテキスト再生完了時に呼び出すフック処理（順次再生用）
-function onCurrentTextEnded() {
+async function onCurrentTextEnded() {
     // プレイリスト内に次のテキストが存在する場合
     if (playingIndex !== -1 && playingIndex + 1 < playlist.length) {
         const nextIndex = playingIndex + 1;
-        loadPlaylistItem(nextIndex, true);
+        await loadPlaylistItem(nextIndex, true);
     } else {
         // 全ファイルの再生完了
         playingIndex = -1;
@@ -2827,19 +2927,19 @@ function onCurrentTextEnded() {
 }
 
 // 複数ファイル読み込み・追加関数
-function addFilesToPlaylist(fileItems) {
+async function addFilesToPlaylist(fileItems) {
     // fileItems: [{ path: '...', content: '...' }, ...]
     playlist = fileItems;
     playingIndex = -1;
 
     if (playlist.length > 0) {
-        loadPlaylistItem(0, false);
+        await loadPlaylistItem(0, false);
     }
 }
 
 // 複数ファイル群をソートしてプレイリストに設定・画面読み込みする
 // @param {Array<{path: string, file: string, ext: string, createTime: Date|string, content: string}>} fileItems 
-function addFilesToPlaylist(fileItems) {
+async function addFilesToPlaylist(fileItems) {
     if (!fileItems || fileItems.length === 0) return;
 
     // ★ renderer.js 側でファイルパス（またはファイル名）の昇順ソート
@@ -2853,7 +2953,7 @@ function addFilesToPlaylist(fileItems) {
     renderPlaylistUI();
 
     if (playlist.length > 0) {
-        loadPlaylistItem(0, false);
+        await loadPlaylistItem(0, false);
     }
 }
 
@@ -2869,8 +2969,8 @@ function updatePlaylistDisplayIcons(activeIndex = -1, status = 'stop') {
         const item = playlist[i];
         if (!item) continue;
 
-        // 元のファイル名（またはパス）を取得
-        const rawText = item.path || `Item ${i + 1}`;
+        // フルパスではなく「最後のフォルダ＋ファイル名」を取得
+        const rawText = item.path ? getShortPath(item.path) : `Item ${i + 1}`;
 
         if (i === activeIndex) {
             let prefix = '';

@@ -1,7 +1,7 @@
 // -- preload.js -------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.46.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.47.0';
 // ---------------------------------------------------------------------
 const { contextBridge, ipcRenderer } = require('electron');
 const os = require('os');
@@ -67,4 +67,7 @@ contextBridge.exposeInMainWorld('api', {
     onEngineProgress: (callback) => ipcRenderer.on('engine-progress', (event, value) => callback(value)),
     saveSettingsFile: (targetFilePath, data) => ipcRenderer.invoke('save-settings-file', targetFilePath, data),
     savePlaylistFile: (paths) => ipcRenderer.invoke('save-playlist-file', paths),
+    // ★ 画面終了直前のイベントハンドリング用 Bridge ★
+    onAppCloseRequest: (callback) => ipcRenderer.on('app-close-request', () => callback()),
+    confirmReadyToClose: () => ipcRenderer.invoke('ready-to-close-app')
 });
