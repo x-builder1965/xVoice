@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.46.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.48.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -310,7 +310,8 @@ input[type="file"] {
     display: none;
 }
 
-/* --- ファイルパス マーキー表示エリア --- */
+
+/* --- プレイリスト --- */
 .file-path-display {
     flex: 1;
     min-width: 0;
@@ -327,23 +328,32 @@ input[type="file"] {
     cursor: pointer;
     text-overflow: ellipsis;
     white-space: nowrap;
+
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 .file-path-display option {
     background-color: var(--input-bg);
     color: var(--text-color);
 }
+.file-path-display::-webkit-scrollbar {
+    width: 12px;
+}
+.file-path-display::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 4px;
+}
+.file-path-display::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+    border: 2px solid var(--scrollbar-track);
+}
+.file-path-display::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
 .file-path-display:hover {
     animation-play-state: paused;
-}
-
-/* 2つの .marquee-item のうち、1つ分の幅（50%）だけ左へスライド */
-@keyframes marquee-scroll {
-    0% {
-        transform: translateX(0);
-    }
-    100% {
-        transform: translateX(-50%);
-    }
 }
 
 #btn-file-clear {
