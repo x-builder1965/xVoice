@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.48.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.49.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -129,7 +129,7 @@ body {
 
 .title-group {
     display: flex;
-    align-items: baseline; /* 横並びで文字の下線を揃える */
+    align-items: center; /* 横並びで文字の下線を揃える */
     gap: 12px;
 }
 

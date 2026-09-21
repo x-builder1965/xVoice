@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.47.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.49.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -174,8 +174,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 🔲window イベントリスナー登録🔲
     // 画面のサイズ変更イベント
     registerWindowResize();
-    // アプリ終了前のイベント
-    registerWindowApiOnAppCloseRequest();
 
     // 🔲documentイベントリスナー登録🔲
     // ドキュメントのキーダウンイベント
@@ -652,33 +650,6 @@ function registerWindowResize() {
     });
 }
 
-// アプリ終了前のイベント
-function registerWindowApiOnAppCloseRequest() {
-    window.api?.onAppCloseRequest(async () => {
-        // 一旦無効化（localSturageに保持しているため改めて保存は不要）
-        /*
-        // ★ テキスト変更チェック & 保存ダイアログ表示
-        const currentText = textInput ? textInput.value : '';
-        if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
-            const selectedIndex = parseInt(filePathDisplay?.value, 10);
-            const currentItem = playlist ? playlist[selectedIndex] : null;
-            const rawPath = currentItem ? currentItem.path : '';
-            const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
-
-            try {
-                // 保存完了（ダイアログの「保存」「キャンセル」いずれの操作完了）まで処理を待機
-                await window.api.saveTextFile(textInput.value, currentPath);
-            } catch (error) {
-                // 保存失敗やキャンセル等の例外が発生しても処理を中断させない
-                console.warn('保存処理をスキップまたはキャンセルしました:', error);
-            }
-        }
-        */
-        // 保存処理（またはキャンセル）が完全に完了したらメインへ通知してウィンドウを閉じる
-        await window.api.confirmReadyToClose();
-    });
-}
-
 // 🔲documentイベントリスナー登録🔲
 // ドキュメントのキーダウンイベント
 function registerDocumentKeydown() {
@@ -999,6 +970,8 @@ function registerBtnThemeClick() {
 // プレイリストの変更イベント
 async function registerFilePathDisplayChange() {
     filePathDisplay?.addEventListener('change', async (e) => {
+        // ★ テキスト変更チェック & 保存ダイアログ表示
+        await saveFileContent(playingIndex, textInput.value);
         // ダイアログの成否・「保存/キャンセル」に関係なく以降の読み込み処理を実行
         const selectedIndex = parseInt(e.target.value, 10);
         if (!isNaN(selectedIndex) && playlist[selectedIndex]) {
@@ -1031,20 +1004,8 @@ function registerTextInputClick() {
 function registerBtnFolderSelectClick() {
     btnFolderSelect?.addEventListener('click', async () => {
         // ★ テキスト変更チェック & 保存ダイアログ表示
-        const currentText = textInput ? textInput.value : '';
-        if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
-            const selectedIndex = parseInt(filePathDisplay?.value, 10);
-            const currentItem = playlist[selectedIndex];
-            const rawPath = currentItem ? currentItem.path : '';
-            const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
-            try {
-                // 保存完了（ダイアログの「保存」「キャンセル」いずれの操作完了）まで処理を待機
-                await window.api.saveTextFile(textInput.value, currentPath);
-            } catch (error) {
-                // 保存失敗やキャンセル等の例外が発生しても処理を中断させない
-                console.warn('保存処理をスキップまたはキャンセルしました:', error);
-            }
-        }
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        await saveFileContent(selectedIndex, textInput.value);
 
         const fileDataList = await window.api.selectFolder();
         
@@ -1070,20 +1031,8 @@ function registerBtnFolderSelectClick() {
 function registerBtnFileSelectClick() {
     btnFileSelect?.addEventListener('click', async () => {
         // ★ テキスト変更チェック & 保存ダイアログ表示
-        const currentText = textInput ? textInput.value : '';
-        if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
-            const selectedIndex = parseInt(filePathDisplay?.value, 10);
-            const currentItem = playlist[selectedIndex];
-            const rawPath = currentItem ? currentItem.path : '';
-            const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
-            try {
-                // 保存完了（ダイアログの「保存」「キャンセル」いずれの操作完了）まで処理を待機
-                await window.api.saveTextFile(textInput.value, currentPath);
-            } catch (error) {
-                // 保存失敗やキャンセル等の例外が発生しても処理を中断させない
-                console.warn('保存処理をスキップまたはキャンセルしました:', error);
-            }
-        }
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        await saveFileContent(selectedIndex, textInput.value);
 
         const fileDataList = await window.api.selectFile();
         if (!fileDataList || fileDataList.length === 0) return;
@@ -1104,20 +1053,8 @@ function registerBtnFileSelectClick() {
 function registerBtnFileClearClick() {
     btnFileClear?.addEventListener('click', async () => {
         // ★ テキスト変更チェック & 保存ダイアログ表示
-        const currentText = textInput ? textInput.value : '';
-        if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
-            const selectedIndex = parseInt(filePathDisplay?.value, 10);
-            const currentItem = playlist[selectedIndex];
-            const rawPath = currentItem ? currentItem.path : '';
-            const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
-            try {
-                // 保存完了（ダイアログの「保存」「キャンセル」いずれの操作完了）まで処理を待機
-                await window.api.saveTextFile(textInput.value, currentPath);
-            } catch (error) {
-                // 保存失敗やキャンセル等の例外が発生しても処理を中断させない
-                console.warn('保存処理をスキップまたはキャンセルしました:', error);
-            }
-        }
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        await saveFileContent(selectedIndex, textInput.value);
 
         playlist = [];
         playingIndex = -1;
@@ -1488,11 +1425,15 @@ function registerBtnPlaylistSaveClick() {
 
 // ⏮️ 前ファイルのクリックイベント
 function registerBtnPrevFileClick() {
-    btnPrevFile?.addEventListener('click', () => {
+    btnPrevFile?.addEventListener('click', async () => {
         // プレイリスト未読み込み、または先頭ファイルの場合は移動しない
         if (!playlist || playlist.length === 0 || playingIndex <= 0) {
             return;
         }
+
+        // ★ テキスト変更チェック & 保存ダイアログ表示
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        await saveFileContent(selectedIndex, textInput.value);
 
         // 前のファイルへ移動して読み込み
         playingIndex--;
@@ -1570,11 +1511,15 @@ function registerBtnNextLineClick() {
 
 // ⏭️ 次ファイルのクリックイベント
 function registerBtnNextFileClick() {
-    btnNextFile?.addEventListener('click', () => {
+    btnNextFile?.addEventListener('click', async () => {
         // プレイリスト未読み込み、または末尾ファイルの場合は移動しない
         if (!playlist || playlist.length === 0 || playingIndex >= playlist.length - 1) {
             return;
         }
+
+        // ★ テキスト変更チェック & 保存ダイアログ表示
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        await saveFileContent(selectedIndex, textInput.value);
 
         // 次のファイルへ移動して読み込み
         playingIndex++;
@@ -1879,25 +1824,41 @@ function handleCursorChange() {
         }
     }
 }
-
-// テキストパス・テキスト反映
-async function loadFileContent(path, content) {
+// テキストパス・テキスト保存
+async function saveFileContent(selectedIndex, currentText) {
     // ★ テキスト変更チェック & 保存ダイアログ表示
-    const currentText = textInput ? textInput.value : '';
+    const currentItem = playlist[selectedIndex];
+    const rawPath = currentItem ? currentItem.path : '';
+    const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
     if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
-        const selectedIndex = parseInt(filePathDisplay?.value, 10);
-        const currentItem = playlist[selectedIndex];
-        const rawPath = currentItem ? currentItem.path : '';
-        const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
         try {
-            // 保存完了（ダイアログの「保存」「キャンセル」いずれの操作完了）まで処理を待機
-            await window.api.saveTextFile(textInput.value, currentPath);
+            const result = await window.api.saveTextFile(currentText, currentPath);
+            if (result.success) {
+                console.log('保存完了:', result.filePath);
+                textBackup = currentText;
+    
+                // プレイリスト内の内容・パスを同期更新
+                if (currentItem) {
+                    currentItem.path = result.filePath;
+                    currentItem.content = currentText;
+                    /*
+                    renderPlaylistUI();
+                    filePathDisplay.value = selectedIndex;
+                    */
+                }
+    
+                btnSave.classList.remove('change-active');
+                localStorageSetItemAndFile(STORAGE_KEYS.TEXT_BACKUP, textBackup);
+            }
         } catch (error) {
             // 保存失敗やキャンセル等の例外が発生しても処理を中断させない
             console.warn('保存処理をスキップまたはキャンセルしました:', error);
         }
     }
+}
 
+// テキストパス・テキスト反映
+async function loadFileContent(path, content) {
     const loadedText = (content || '').replace(/\r\n/g, '\n');
 
     if (textInput) textInput.value = loadedText;
@@ -2965,6 +2926,8 @@ async function loadPlaylistItem(index, isAutoPlay = false) {
 async function onCurrentTextEnded() {
     // プレイリスト内に次のテキストが存在する場合
     if (playingIndex !== -1 && playingIndex + 1 < playlist.length) {
+        // ★ テキスト変更チェック & 保存ダイアログ表示
+        await saveFileContent(playingIndex, textInput.value);
         const nextIndex = playingIndex + 1;
         await loadPlaylistItem(nextIndex, true);
     } else {
@@ -2973,17 +2936,6 @@ async function onCurrentTextEnded() {
         if (filePathDisplay && playlist.length > 0) {
             filePathDisplay.value = 0;
         }
-    }
-}
-
-// 複数ファイル読み込み・追加関数
-async function addFilesToPlaylist(fileItems) {
-    // fileItems: [{ path: '...', content: '...' }, ...]
-    playlist = fileItems;
-    playingIndex = -1;
-
-    if (playlist.length > 0) {
-        await loadPlaylistItem(0, false);
     }
 }
 

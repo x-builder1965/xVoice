@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.47.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.49.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -445,24 +445,6 @@ function createWindow() {
         icon: path.join(__dirname, 'xVoice.ico'),
         autoHideMenuBar: true,
         show: false
-    });
-
-    // ★ ウィンドウ閉じる直前の IPC 通信制御 ★
-    mainWindow.on('close', (e) => {
-        // Renderer 側からの最終完了通知でない場合は一度閉じ処理をブロック
-        if (!isQuittingFromRenderer) {
-            e.preventDefault();
-            // Renderer 側に終了準備イベントを送信
-            mainWindow.webContents.send('app-close-request');
-        }
-    });
-
-    // ★ 準備完了後の閉じる要求ハンドラー ★
-    ipcMain.handle('ready-to-close-app', () => {
-        isQuittingFromRenderer = true;
-        if (mainWindow) {
-            mainWindow.close();
-        }
     });
 
     // (既存の loadApp 周りの処理...)
