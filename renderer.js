@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.49.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.50.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -2112,7 +2112,9 @@ async function playLineByLine(fromStart = false) {
 
                 triggerPrefetch(lines, currentSpeakerId);
 
-                if (isStopped || isLineJumped || currentSession !== playSessionId) {
+                // 停止→再開時の再キャッシュ防止
+                // if (isStopped || isLineJumped || currentSession !== playSessionId) {
+                if (isLineJumped || currentSession !== playSessionId) {
                     if (isLineJumped) {
                         isLineJumped = false;
                         clearAudioCache();
