@@ -1370,27 +1370,7 @@ function registerBtnSaveClick() {
             return;
         }
 
-        const selectedIndex = parseInt(filePathDisplay?.value, 10);
-        const currentItem = playlist[selectedIndex];
-        const rawPath = currentItem ? currentItem.path : '';
-        const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
-
-        const result = await window.api.saveTextFile(textInput.value, currentPath);
-        if (result.success) {
-            console.log('保存完了:', result.filePath);
-            textBackup = textInput.value;
-
-            // プレイリスト内の内容・パスを同期更新
-            if (currentItem) {
-                currentItem.path = result.filePath;
-                currentItem.content = textInput.value;
-                renderPlaylistUI();
-                filePathDisplay.value = selectedIndex;
-            }
-
-            btnSave.classList.remove('change-active');
-            localStorageSetItemAndFile(STORAGE_KEYS.TEXT_BACKUP, textBackup);
-        }
+        await saveFileContent(playingIndex, textInput.value, true);
     });
 }
 
@@ -1824,13 +1804,14 @@ function handleCursorChange() {
         }
     }
 }
+
 // テキストパス・テキスト保存
-async function saveFileContent(selectedIndex, currentText) {
+async function saveFileContent(selectedIndex, currentText, compulsion = false) {
     // ★ テキスト変更チェック & 保存ダイアログ表示
     const currentItem = playlist[selectedIndex];
     const rawPath = currentItem ? currentItem.path : '';
     const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
-    if (typeof textBackup !== 'undefined' && currentText !== textBackup) {
+    if (typeof textBackup !== 'undefined' && (currentText !== textBackup || compulsion)) {
         try {
             const result = await window.api.saveTextFile(currentText, currentPath);
             if (result.success) {
@@ -2193,6 +2174,9 @@ async function playLineByLine(fromStart = false) {
     stopAllAudioPlayers();
 
     if (!isStopped && !isLineJumped) {
+        // テキスト変更があれば保存実行
+        await saveFileContent(playingIndex, textInput.value);
+
         clearAudioCache();
         currentLineIndex = 0;
         localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, 0);
