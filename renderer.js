@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.50.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.51.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -106,6 +106,7 @@ let changelogContent = null;     // 更新履歴本文表示領域
 let changelogCloseBtn = null;    // 更新履歴閉じるボタン
 let changelogTitle = null;       // 更新履歴ダイアログタイトル要素
 let btnPlaylistSave = null;      // プレイリスト保存
+let speedSelect = null;          // 再生速度変更
 
 // 🔲localStorage復元🔲
 let localSettings = {};          // アプリ設定値を保持するメモリ内オブジェクト
@@ -178,6 +179,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 🔲documentイベントリスナー登録🔲
     // ドキュメントのキーダウンイベント
     registerDocumentKeydown();
+    // 再生速度変更専用のキーダウンイベント
+    registerDocumentKeydownPlaybackSpeed();
     // 音量変更・キャッシュ量変更専用のキーダウンイベント
     registerDocumentKeydownVolumeAndCache();
     // 音量変更・キャッシュ量変更専用のホイールイベントリスナー
@@ -250,6 +253,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerBtnGenerateClick();
     // 🔊／🔇音量バーの変更イベント
     registerbtnMuteClick();
+    // 再生速度変更のドロップダウンイベント
+    registerSpeedSelectChange();
     // トースターのクリックイベント
     registerToastMessageClick();
     // トースターのマウスエンターイベント
@@ -328,6 +333,7 @@ async function setupAllDomSettings() {
     changelogCloseBtn = document.getElementById('changelogCloseBtn');
     changelogTitle = changelogContainer?.querySelector('h1');
     btnPlaylistSave = document.getElementById('btn-playlist-save');
+    speedSelect = document.getElementById('speedSelect');
 }
 
 // 多重起動時の localStorage 書き込み防止処理
@@ -699,6 +705,20 @@ function registerDocumentKeydown() {
                 e.preventDefault(); // スペース入力やブラウザ標準動作のキャンセル
                 btn.click();        // ボタンクリックを実行
             }
+        }
+    });
+}
+
+// 再生速度変更専用のキーダウンイベント
+function registerDocumentKeydownPlaybackSpeed() {
+    document.addEventListener('keydown', (e) => {
+        // 例: Ctrl + . または Ctrl + , の判定
+        if (e.ctrlKey && e.key === '.') {
+            e.preventDefault();
+            changePlaybackSpeed('up');
+        } else if (e.ctrlKey && e.key === ',') {
+            e.preventDefault();
+            changePlaybackSpeed('down');
         }
     });
 }
@@ -1570,6 +1590,13 @@ function registerbtnMuteClick() {
     });
 }
 
+// 再生速度変更のドロップダウンイベント
+function registerSpeedSelectChange() {
+    speedSelect.addEventListener('change', () => {
+        applyPlaybackRate();
+    });
+}
+
 // トースターのクリックイベント
 function registerToastMessageClick() {
     toastMessage?.addEventListener('click', hideToast);
@@ -2094,7 +2121,6 @@ async function playLineByLine(fromStart = false) {
                 triggerPrefetch(lines, currentSpeakerId);
 
                 // 停止→再開時の再キャッシュ防止
-                // if (isStopped || isLineJumped || currentSession !== playSessionId) {
                 if (isLineJumped || currentSession !== playSessionId) {
                     if (isLineJumped) {
                         isLineJumped = false;
@@ -2111,6 +2137,9 @@ async function playLineByLine(fromStart = false) {
                 const blobUrl = URL.revokeObjectURL ? URL.createObjectURL(blob) : URL.createObjectURL(blob);
 
                 currentPlayer.src = blobUrl;
+
+                // ★ 再生前に選択されている再生速度（playbackRate）を設定
+                currentPlayer.playbackRate = getSelectedPlaybackRate();
 
                 const nextLineIndex = i + 1;
                 const nextPlayer = players[1 - activePlayerIndex];
@@ -2991,5 +3020,36 @@ function updatePlaylistControlButtons() {
     // 末尾ファイルでは次ファイルボタンを無効化
     if (btnNextFile) {
         btnNextFile.disabled = (playingIndex >= playlist.length - 1);
+    }
+}
+
+// 現在選択中の再生速度を取得
+function getSelectedPlaybackRate() {
+    return speedSelect ? parseFloat(speedSelect.value) || 1.0 : 1.0;
+}
+
+// プレイヤー全体に再生速度を即時反映
+function applyPlaybackRate() {
+    const rate = getSelectedPlaybackRate();
+    if (audioPlayer) audioPlayer.playbackRate = rate;
+    if (audioPlayerNext) audioPlayerNext.playbackRate = rate;
+}
+
+// キーボード操作で段階的に速度変更（Ctrl+. / Ctrl+,）
+function changePlaybackSpeed(direction) {
+    if (!speedSelect) return;
+    const options = Array.from(speedSelect.options);
+    const currentIndex = speedSelect.selectedIndex;
+
+    if (direction === 'up' && currentIndex < options.length - 1) {
+        speedSelect.selectedIndex = currentIndex + 1;
+    } else if (direction === 'down' && currentIndex > 0) {
+        speedSelect.selectedIndex = currentIndex - 1;
+    }
+
+    applyPlaybackRate();
+    // 選択値をトースト表示などでユーザーに通知（実装がある場合）
+    if (typeof showToast === 'function') {
+        showToast(`再生速度: ${speedSelect.value}x`);
     }
 }
