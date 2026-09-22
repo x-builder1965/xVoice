@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.52.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.53.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -61,6 +61,7 @@ let speakerSelect = null;        // 話者（ボイス/キャラクター）選�
 let btnConnect = null;           // 音声合成エンジン接続ボタン
 let inputAddress = null;         // エンジンサーバーアドレス入力欄
 let engineProgress = null;       // エンジン起動・接続処理の進捗表示領域
+let btnFolderSelect = null;      // フォルダ選択ボタン
 let btnFileSelect = null;        // テキストファイル選択ボタン
 let filePathDisplay = null;      // 開いているファイルのパス表示エリア
 let textInput = null;            // 本文テキスト入力・編集エリア（textarea）
@@ -228,8 +229,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerTextInputInput();
     // 🔄接続／切断のクリックイベント
     registerBtnConnectClick();
-    // 話者リストの変更イベント
-    registerSpeakerSelectChange();
     // 🖊️読み編集のクリックイベント
     registerBtnRubyClick();
     // 🔠統一編集のクリックイベント
@@ -962,6 +961,7 @@ function registerInputAddressChange() {
 // 話者モデルの変更イベント
 function registerSpeakerSelectChange() {
     speakerSelect?.addEventListener('change', (e) => {
+        clearAudioCache();
         localStorageSetItemAndFile(STORAGE_KEYS.SPEAKER, e.target.value);
     });
 }
@@ -1133,14 +1133,6 @@ function registerTextInputInput() {
 function registerBtnConnectClick() {
     btnConnect?.addEventListener('click', async () => {
         await handleConnectToggle();
-    });
-}
-
-// 話者リストの変更イベント
-function registerSpeakerSelectChange() {
-    speakerSelect.addEventListener('change', () => {
-        clearAudioCache();
-        // 必要に応じてプリフェッチのリセットや停止処理
     });
 }
 
