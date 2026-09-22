@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.51.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.52.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -30,7 +30,7 @@ const shortcutMap = {
     'ctrl+n':           { control: 'btn-connect' },
     'ctrl+h':           { control: 'btn-ruby' },
     'ctrl+u':           { control: 'btn-unity' },
-    'ctrl+a':           { control: 'btn-search' },
+    'ctrl+b':           { control: 'btn-search' },
     'ctrl+s':           { control: 'btn-save' },
     'ctrl+l':           { control: 'btn-playlist-save' },
     'ctrl+pageup':      { control: 'btn-prev-file' },
@@ -48,6 +48,7 @@ const disableKeyMap = new Set([
     'ctrl+v',
     'ctrl+z',
     'ctrl+y',
+    'ctrl+a',
 ]);
 const PREFETCH_LINES = 10;       // 常に何行先までキャッシュ（先読み）を維持するか
 const audioCache = new Map();    // 音声データキャッシュ (key: lineIndex, value: audioData)
@@ -991,9 +992,10 @@ function registerBtnThemeClick() {
 async function registerFilePathDisplayChange() {
     filePathDisplay?.addEventListener('change', async (e) => {
         // ★ テキスト変更チェック & 保存ダイアログ表示
-        await saveFileContent(playingIndex, textInput.value);
-        // ダイアログの成否・「保存/キャンセル」に関係なく以降の読み込み処理を実行
         const selectedIndex = parseInt(e.target.value, 10);
+        await saveFileContent(selectedIndex, textInput.value);
+
+        // ダイアログの成否・「保存/キャンセル」に関係なく以降の読み込み処理を実行
         if (!isNaN(selectedIndex) && playlist[selectedIndex]) {
             if (isPlaying) {
                 stopPlayback();
@@ -1385,12 +1387,9 @@ function registerBtnSearchClick() {
 // 💾保存のクリックイベント
 function registerBtnSaveClick() {
     btnSave?.addEventListener('click', async () => {
-        if (!textInput.value.trim()) {
-            showToast('保存するテキストがありません。', 'warning');
-            return;
-        }
-
-        await saveFileContent(playingIndex, textInput.value, true);
+        // ★ 保存ダイアログ表示
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        await saveFileContent(selectedIndex, textInput.value, true);
     });
 }
 
@@ -2203,8 +2202,9 @@ async function playLineByLine(fromStart = false) {
     stopAllAudioPlayers();
 
     if (!isStopped && !isLineJumped) {
-        // テキスト変更があれば保存実行
-        await saveFileContent(playingIndex, textInput.value);
+        // ★ テキスト変更チェック & 保存ダイアログ表示
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        await saveFileContent(selectedIndex, textInput.value);
 
         clearAudioCache();
         currentLineIndex = 0;
@@ -2942,7 +2942,9 @@ async function onCurrentTextEnded() {
     // プレイリスト内に次のテキストが存在する場合
     if (playingIndex !== -1 && playingIndex + 1 < playlist.length) {
         // ★ テキスト変更チェック & 保存ダイアログ表示
-        await saveFileContent(playingIndex, textInput.value);
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        await saveFileContent(selectedIndex, textInput.value);
+
         const nextIndex = playingIndex + 1;
         await loadPlaylistItem(nextIndex, true);
     } else {
