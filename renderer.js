@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.53.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.54.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -89,6 +89,7 @@ let progressCountEl = null;      // 進捗カウント表示
 let textProgressBar = null;      // 全体のテキスト読上げ進捗バー
 let textBufferProgressBar = null; // 音声データ生成（バッファリング）進捗バー
 let mp3ProgressBar = null;       // mp3ファイル出力進捗バー
+let playlistProgressBar = null;  // プレイリスト作成進捗バー
 let cacheCountDisplay = null;    // キャッシュ数
 let cacheLimitSlider = null;     // キャッシュ数変更バー
 let writingModeSelect = null;    // 縦書き / 横書き切り替えドロップダウン
@@ -173,6 +174,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupTextDirection();
     // ☀️／🌙 テーマ設定の復元
     setupTheme();
+
+    // 🔲on イベントリスナー登録🔲
+    // プレイリスト作成・追加 IPC進捗受信用リスナー
+    registerOnPlaylistProgress();
 
     // 🔲window イベントリスナー登録🔲
     // 画面のサイズ変更イベント
@@ -314,6 +319,7 @@ async function setupAllDomSettings() {
     textProgressBar = document.getElementById('text-progress');
     textBufferProgressBar = document.getElementById('text-buffer-progress');
     mp3ProgressBar = document.getElementById('mp3-progress');
+    playlistProgressBar = document.getElementById('playlist-progress');
     cacheCountDisplay = document.getElementById('cache-count-display');
     cacheLimitSlider = document.getElementById('cache-limit-slider');
     writingModeSelect = document.getElementById('writing-mode-select');
@@ -639,6 +645,17 @@ async function initEngine() {
 
     if (typeof moveCursorToLineStart === 'function') {
         moveCursorToLineStart(currentLineIndex, true);
+    }
+}
+
+// 🔲on イベントリスナー登録🔲
+// プレイリスト作成・追加 IPC進捗受信用リスナー
+function registerOnPlaylistProgress() {
+    if (window.api && window.api.onPlaylistProgress) {
+        window.api.onPlaylistProgress((data) => {
+            showProgressBar('playlist');
+            updateProgressUI(playlistProgressBar, data.current, data.total, '件');
+        });
     }
 }
 
@@ -2655,14 +2672,15 @@ async function triggerPrefetch(lines, speakerId) {
 }
 
 // プログレスバー表示の切り替え関数 (コンテナ制御に対応)
-// @param {string} type 'engine' | 'text' | 'mp3'
+// @param {string} type 'engine' | 'text' | 'mp3' | 'playlist'
 function showProgressBar(type) {
     if (engineProgressBar) engineProgressBar.hidden = (type !== 'engine');
     if (textProgressContainer) textProgressContainer.hidden = (type !== 'text');
     if (mp3ProgressBar) mp3ProgressBar.hidden = (type !== 'mp3');
+    if (playlistProgressBar) playlistProgressBar.hidden = (type !== 'playlist');
 
-    // 'engine'、'mp3'以外の場合は'text'を初期表示
-    if (type !== 'engine' && type !== 'mp3') {
+    // 'engine'、'mp3'、'playlist' 以外の場合は 'text' を初期表示
+    if (type !== 'engine' && type !== 'mp3' && type !== 'playlist') {
         const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.length > 0 ? fullText.split('\n') : [];
         const lineIndex = fullText.length > 0 ? currentLineIndex + 1 : 0;

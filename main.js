@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.49.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.54.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -252,7 +252,7 @@ function registerIpcMainGenerateAudio() {
 
 // IPC通信: フォルダ選択ハンドラー
 function registerIpcMainSelectFolder() {
-    ipcMain.handle('select-folder', async () => {
+    ipcMain.handle('select-folder', async (event) => {
         const result = await dialog.showOpenDialog({
             title: 'フォルダの選択',
             properties: ['openDirectory']
@@ -263,13 +263,13 @@ function registerIpcMainSelectFolder() {
         }
 
         const folderPath = result.filePaths[0];
-        return await scanFolderAndCollectFiles(folderPath);
+        return await scanFolderAndCollectFiles(folderPath, event.sender);
     });
 }
 
 // ファイル選択ダイアログを表示するIPCハンドラー
 function registerIpcMainSelectFile() {
-    ipcMain.handle('select-file', async () => {
+    ipcMain.handle('select-file', async (event) => {
         const result = await dialog.showOpenDialog({
             properties: ['openFile', 'multiSelections'],
             filters: [
@@ -284,7 +284,7 @@ function registerIpcMainSelectFile() {
             return null;
         }
 
-        const rawItemMap = new Map(); // 重複排除用マップ (Key: filePath)
+        const rawItemMap = new Map();
 
         for (const selectedPath of result.filePaths) {
             const ext = path.extname(selectedPath);
@@ -315,9 +315,13 @@ function registerIpcMainSelectFile() {
             }
         }
 
-        // ファイル内容を読み込んで各要素オブジェクトに合体
+        // ファイル内容の読み込みと進捗送信
+        const itemsArray = Array.from(rawItemMap.values());
+        const total = itemsArray.length;
         const fileDataList = [];
-        for (const item of rawItemMap.values()) {
+
+        for (let i = 0; i < total; i++) {
+            const item = itemsArray[i];
             try {
                 const content = await fs.readFile(item.path, 'utf-8');
                 fileDataList.push({
@@ -327,9 +331,11 @@ function registerIpcMainSelectFile() {
             } catch (err) {
                 console.error(`ファイル読み込み失敗: ${item.path}`, err);
             }
+            // 進捗状況を通知
+            event.sender.send('playlist-progress', { current: i + 1, total: total });
         }
 
-        return fileDataList; // 配列で返却
+        return fileDataList;
     });
 }
 
@@ -424,7 +430,7 @@ function registerIpcMainSavePlaylistFile() {
 // Ｄ＆Ｄ IPCハンドラー
 function registerIpcMainProcessDroppedPaths() {
     ipcMain.handle('process-dropped-paths', async (event, filePaths) => {
-        return await processDroppedPaths(filePaths);
+        return await processDroppedPaths(filePaths, event.sender);
     });
 }
 
@@ -606,34 +612,6 @@ async function readTextFile(filePath) {
     }
 }
 
-// .amppl プレイリストファイルを解析してテキストファイル群を読み込む
-async function parseAmpplFile(playlistPath) {
-    try {
-        const content = await fs.promises.readFile(playlistPath, 'utf8');
-        // 改行で分割し、空行を除外
-        const lines = content.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-        const loadedItems = [];
-
-        for (const linePath of lines) {
-            // .txt ファイルのみを対象とする (.mp4 等はスキップ)
-            if (path.extname(linePath).toLowerCase() === '.txt') {
-                try {
-                    const fileData = await readTextFile(linePath);
-                    if (fileData) {
-                        loadedItems.push(fileData);
-                    }
-                } catch (err) {
-                    console.warn(`[Playlist] ファイルの読み込みに失敗しました: ${linePath}`, err);
-                }
-            }
-        }
-        return loadedItems;
-    } catch (error) {
-        console.error(`[Playlist] .amppl の読み込みエラー: ${playlistPath}`, error);
-        return [];
-    }
-}
-
 // プレイリストファイル (.amppl) を解析し、存在する .txt ファイルの詳細情報一覧を取得する関数
 // @param {string} playlistPath 
 // @returns {Promise<Array<{path: string, file: string, ext: string, createTime: Date}>>}
@@ -674,76 +652,30 @@ async function parsePlaylistFile(playlistPath) {
 }
 
 // ディレクトリ内を再帰的に検索してテキスト情報を取得する関数
-async function scanFolderAndCollectFiles(dirPath) {
-    let results = [];
-    
-    try {
-        const entries = await fs.readdir(dirPath, { withFileTypes: true });
-
-        for (const entry of entries) {
-            const fullPath = path.join(dirPath, entry.name);
-
-            if (entry.isDirectory()) {
-                // サブフォルダを再帰的に検索
-                const subResults = await scanFolderAndCollectFiles(fullPath);
-                results = results.concat(subResults);
-            } else if (entry.isFile()) {
-                const ext = path.extname(entry.name).toLowerCase();
-
-                if (ext === '.txt') {
-                    // .txt ファイルの読み込み
-                    try {
-                        const content = await fs.readFile(fullPath, 'utf-8');
-                        results.push({ path: fullPath, content });
-                    } catch (err) {
-                        console.warn(`ファイル読み込みエラー: ${fullPath}`, err);
-                    }
-                } else if (ext === '.amppl') {
-                    // .amppl プレイリストファイルの展開読み込み
-                    const playlistItems = await parsePlaylistFile(fullPath);
-                    for (const item of playlistItems) {
-                        try {
-                            const content = await fs.readFile(item.path, 'utf-8');
-                            results.push({ path: item.path, content });
-                        } catch (err) {
-                            console.warn(`プレイリスト内テキスト読み込みエラー: ${item.path}`, err);
-                        }
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.error(`フォルダスキャンエラー: ${dirPath}`, error);
-    }
-
-    // 重複パスの排除（同一テキストが複数回登録されるのを防止）
-    const uniqueMap = new Map();
-    for (const item of results) {
-        if (!uniqueMap.has(item.path)) {
-            uniqueMap.set(item.path, item);
-        }
-    }
-
-    return Array.from(uniqueMap.values());
+async function scanFolderAndCollectFiles(dirPath, webContents) {
+    const rawFiles = await collectFilesFromFolder(dirPath);
+    return await readFilesWithProgress(rawFiles, webContents);
 }
 
 // ドロップされたパス一覧を処理するメイン関数
-async function processDroppedPaths(filePaths) {
-    let results = [];
+async function processDroppedPaths(filePaths, webContents) {
+    let rawFiles = [];
 
     for (const targetPath of filePaths) {
         try {
             const stats = await fs.stat(targetPath);
-
             if (stats.isDirectory()) {
-                // フォルダの場合は再帰スキャン
-                const subResults = await scanFolderAndCollectFiles(targetPath);
-                results = results.concat(subResults);
+                const subFiles = await collectFilesFromFolder(targetPath);
+                rawFiles = rawFiles.concat(subFiles);
             } else if (stats.isFile()) {
-                // ファイルの場合は単体処理
-                const fileResult = await processSingleFile(targetPath);
-                if (fileResult) {
-                    results = results.concat(fileResult);
+                const ext = path.extname(targetPath).toLowerCase();
+                if (ext === '.txt') {
+                    rawFiles.push({ path: targetPath });
+                } else if (ext === '.amppl') {
+                    const playlistItems = await parsePlaylistFile(targetPath);
+                    for (const item of playlistItems) {
+                        rawFiles.push({ path: item.path });
+                    }
                 }
             }
         } catch (err) {
@@ -751,15 +683,7 @@ async function processDroppedPaths(filePaths) {
         }
     }
 
-    // 重複パスの排除
-    const uniqueMap = new Map();
-    for (const item of results) {
-        if (!uniqueMap.has(item.path)) {
-            uniqueMap.set(item.path, item);
-        }
-    }
-
-    return Array.from(uniqueMap.values());
+    return await readFilesWithProgress(rawFiles, webContents);
 }
 
 // 単一ファイル（.txt / .amppl）の処理
@@ -787,4 +711,61 @@ async function processSingleFile(filePath) {
         return items;
     }
     return null;
+}
+
+// ファイルパスのリストからテキスト内容を一括読み込みし進捗を通知するヘルパー関数
+async function readFilesWithProgress(items, webContents) {
+    const uniqueMap = new Map();
+    for (const item of items) {
+        if (!uniqueMap.has(item.path)) {
+            uniqueMap.set(item.path, item);
+        }
+    }
+
+    const uniqueItems = Array.from(uniqueMap.values());
+    const total = uniqueItems.length;
+    const results = [];
+
+    for (let i = 0; i < total; i++) {
+        const item = uniqueItems[i];
+        try {
+            const content = await fs.readFile(item.path, 'utf-8');
+            results.push({ path: item.path, content });
+        } catch (err) {
+            console.warn(`ファイル読み込みエラー: ${item.path}`, err);
+        }
+        if (webContents) {
+            webContents.send('playlist-progress', { current: i + 1, total: total });
+        }
+    }
+
+    return results;
+}
+
+// ディレクトリ内を再帰的に検索してパスを収集する関数
+async function collectFilesFromFolder(dirPath) {
+    let fileList = [];
+    try {
+        const entries = await fs.readdir(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = path.join(dirPath, entry.name);
+            if (entry.isDirectory()) {
+                const subList = await collectFilesFromFolder(fullPath);
+                fileList = fileList.concat(subList);
+            } else if (entry.isFile()) {
+                const ext = path.extname(entry.name).toLowerCase();
+                if (ext === '.txt') {
+                    fileList.push({ path: fullPath });
+                } else if (ext === '.amppl') {
+                    const playlistItems = await parsePlaylistFile(fullPath);
+                    for (const item of playlistItems) {
+                        fileList.push({ path: item.path });
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error(`フォルダスキャンエラー: ${dirPath}`, error);
+    }
+    return fileList;
 }

@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.51.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.54.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -380,7 +380,8 @@ input[type="file"] {
 .engine-progress,
 .text-progress,
 .text-buffer-progress,
-.mp3-progress {
+.mp3-progress,
+.playlist-progress {
     width: 100%;
     height: 8px;
     border-radius: 4px;
@@ -389,38 +390,41 @@ input[type="file"] {
     border: none;
     background-color: transparent; /* 重ね合わせのため透明に設定 */
 }
-
 /* 各プログレスバー背景（WebKit） */
 .engine-progress::-webkit-progress-bar,
 .text-progress::-webkit-progress-bar,
 .text-buffer-progress::-webkit-progress-bar,
-.mp3-progress::-webkit-progress-bar {
+.mp3-progress::-webkit-progress-bar,
+.playlist-progress::-webkit-progress-bar {
     background-color: transparent;
     border-radius: 4px;
 }
-
+/* エンジン接続プログレスバー */
 .engine-progress::-webkit-progress-value {
     background-color: #ff5252;
     border-radius: 4px;
     transition: width 0.3s ease;
 }
-
 /* 再生プログレスバー（前面） */
 .text-progress::-webkit-progress-value {
     background-color: #2196f3;
     border-radius: 4px;
     transition: width 0.3s ease;
 }
-
 /* キャッシュ（バッファ）プログレスバー（背面・淡い青） */
 .text-buffer-progress::-webkit-progress-value {
     background-color: #90caf9f6; /* 水色 */
     border-radius: 4px;
     transition: width 0.3s ease;
 }
-
 .mp3-progress::-webkit-progress-value {
     background-color: #ffca28;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+/* プレイリスト処理プログレスバー（緑色） */
+.playlist-progress::-webkit-progress-value {
+    background-color: #4caf50;
     border-radius: 4px;
     transition: width 0.3s ease;
 }
