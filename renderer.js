@@ -1001,14 +1001,15 @@ async function registerFilePathDisplayChange() {
 
         // ダイアログの成否・「保存/キャンセル」に関係なく以降の読み込み処理を実行
         if (!isNaN(selectedIndex) && playlist[selectedIndex]) {
-            if (isPlaying) {
-                stopPlayback();
-            }
-            isPlaying = false;
             await loadPlaylistItem(selectedIndex, false);
 
             // 選択された Index を localStorage に保存
             localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, selectedIndex);
+        }
+
+        // 再生中の場合は前ファイルを再生
+        if (isPlaying) {
+            playLineByLine();
         }
     });
 }
