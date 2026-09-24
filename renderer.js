@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.54.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.55.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -117,7 +117,7 @@ let localSettings = {};          // アプリ設定値を保持するメモリ�
 // 🔲グローバル変数定義🔲
 let isSecondary = false;         // 多重起動（セカンダリインスタンス）判定フラグ
 let playlist = [];               // プレイリストデータ: [{ path: string, content: string }]
-let playingIndex = -1;           // 現在再生中のインデックス (-1 は未再生)
+let playingIndex = 0;            // 現在再生中のインデックス
 let isPlaying = false;           // 音声再生中フラグ
 let isStopped = false;           // 再生停止要求フラグ
 let isLineJumped = false;        // 再生中の行ジャンプ用フラグ
@@ -531,11 +531,12 @@ function setupFontSize() {
     applyFontSize(localSettings[STORAGE_KEYS.FONT_SIZE]);
 }
 
-// 引数ファイルの復元
+// 引数ファイルの設定
 function setupFilePathAndTextArgs(launchData) {
     if (launchData && launchData.filePath) {
         playlist = [{ path: launchData.filePath, content: launchData.content }];
-        playingIndex = -1;
+        isPlaying = false;
+        playingIndex = 0;
         localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST, JSON.stringify(playlist));
         localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, '0');
     }
@@ -556,6 +557,10 @@ function setupFilePathAndTextArgs(launchData) {
 
 // ファイルパス＆テキストの復元
 function setupFilePathAndText() {
+    playlist = [];
+    isPlaying = false;
+    playingIndex = 0;
+
     // 1. STORAGE_KEYS.PLAYLIST からプレイリスト配列を復元
     if (localSettings[STORAGE_KEYS.PLAYLIST]) {
         try {
@@ -563,18 +568,10 @@ function setupFilePathAndText() {
             if (Array.isArray(parsed)) {
                 playlist = parsed;
                 playingIndex = parseInt(localSettings[STORAGE_KEYS.PLAYLIST_INDEX], 10);
-            } else {
-                playlist = [];
-                playingIndex = -1;
             }
         } catch (e) {
             console.error('PLAYLIST parsing error:', e);
-            playlist = [];
-            playingIndex = -1;
         }
-    } else {
-        playlist = [];
-        playingIndex = -1;
     }
 
     // 3. STORAGE_KEYS.PLAYLIST_INDEX から保存されているインデックスを取得
@@ -1007,7 +1004,7 @@ async function registerFilePathDisplayChange() {
             if (isPlaying) {
                 stopPlayback();
             }
-            playingIndex = -1;
+            isPlaying = false;
             await loadPlaylistItem(selectedIndex, false);
 
             // 選択された Index を localStorage に保存
@@ -1086,7 +1083,8 @@ function registerBtnFileClearClick() {
         await saveFileContent(selectedIndex, textInput.value);
 
         playlist = [];
-        playingIndex = -1;
+        isPlaying = false;
+        playingIndex = 0;
 
         // <select>（プレイリスト表示）を「選択されていません」のみに初期化
         if (filePathDisplay) {
@@ -1425,21 +1423,23 @@ function registerBtnPlaylistSaveClick() {
 function registerBtnPrevFileClick() {
     btnPrevFile?.addEventListener('click', async () => {
         // プレイリスト未読み込み、または先頭ファイルの場合は移動しない
-        if (!playlist || playlist.length === 0 || playingIndex <= 0) {
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        if (!playlist || playlist.length === 0 || selectedIndex <= 0) {
             return;
         }
 
         // テキスト変更チェック & 保存ダイアログ表示
-        const selectedIndex = parseInt(filePathDisplay?.value, 10);
         await saveFileContent(selectedIndex, textInput.value);
 
         // 前のファイルへ移動して読み込み
+        playingIndex = selectedIndex;
         playingIndex--;
         const item = playlist[playingIndex];
         filePathDisplay.value = playingIndex;
 
         localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, playingIndex);
         loadFileContent(item.path, item.content);
+        renderPlaylistUI();
 
         // 再生中の場合は前ファイルを再生
         if (isPlaying) {
@@ -1511,21 +1511,23 @@ function registerBtnNextLineClick() {
 function registerBtnNextFileClick() {
     btnNextFile?.addEventListener('click', async () => {
         // プレイリスト未読み込み、または末尾ファイルの場合は移動しない
-        if (!playlist || playlist.length === 0 || playingIndex >= playlist.length - 1) {
+        const selectedIndex = parseInt(filePathDisplay?.value, 10);
+        if (!playlist || playlist.length === 0 || selectedIndex >= playlist.length - 1) {
             return;
         }
 
         // テキスト変更チェック & 保存ダイアログ表示
-        const selectedIndex = parseInt(filePathDisplay?.value, 10);
         await saveFileContent(selectedIndex, textInput.value);
 
         // 次のファイルへ移動して読み込み
+        playingIndex = selectedIndex;
         playingIndex++;
         const item = playlist[playingIndex];
         filePathDisplay.value = playingIndex;
 
         localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, playingIndex);
         loadFileContent(item.path, item.content);
+        renderPlaylistUI();
 
         // 再生中の場合は次ファイルを再生
         if (isPlaying) {
@@ -2045,7 +2047,6 @@ function stopPlayback() {
 
     // 停止処理: isPlaying フラグ・playingIndex をリセット
     isPlaying = false;
-    playingIndex = -1;
     updateButtonStates(false);
     renderPlaylistUI();
 
@@ -2219,7 +2220,7 @@ async function playLineByLine(fromStart = false) {
         currentLineIndex++;
     }
 
-    // 古いセッションの遅延処理であれば、以降の後処理（playingIndex = -1等）を実行せずに静かに終了する
+    // 古いセッションの遅延処理であれば、以降の後処理（isPlaying = false等）を実行せずに静かに終了する
     if (currentSession !== playSessionId) {
         return;
     }
@@ -2259,11 +2260,17 @@ async function playLineByLine(fromStart = false) {
         moveCursorToLineStart(0, true);
     }
 
-    // 手動停止時、または全リスト再生完了時のみ状態リセット
+    // 全リスト再生完了時のみ状態リセット
     isPlaying = false;
-    playingIndex = -1;
-    updateButtonStates(false);
+    playingIndex = 0;
+    const item = playlist[playingIndex];
+    filePathDisplay.value = playingIndex;
+
+    localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, playingIndex);
+    loadFileContent(item.path, item.content);
     renderPlaylistUI();
+
+    updateButtonStates(false);
 }
 
 // 全テキスト生成実行
@@ -2959,7 +2966,8 @@ async function onCurrentTextEnded() {
         await loadPlaylistItem(nextIndex, true);
     } else {
         // 全ファイルの再生完了
-        playingIndex = -1;
+        isPlaying = false;
+        playingIndex = 0;
         if (filePathDisplay && playlist.length > 0) {
             filePathDisplay.value = 0;
         }
@@ -2976,7 +2984,7 @@ async function addFilesToPlaylist(fileItems) {
     const sortedItems = [...fileItems].sort((a, b) => collator.compare(a.path, b.path));
 
     playlist = sortedItems; // 各要素が { path, file, ext, createTime, content } を保持
-    playingIndex = -1;
+    playingIndex = 0;
 
     // UI (プルダウン) の更新
     renderPlaylistUI();

@@ -1,6 +1,6 @@
 {
   "name": "xvoice",
-  "version": "1.54.0",
+  "version": "1.55.0",
   "description": "xVoice Text-to-Speech",
   "main": "main.js",
   "author": "x-builder",
