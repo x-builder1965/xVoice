@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.54.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.57.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -337,21 +337,6 @@ input[type="file"] {
     background-color: var(--input-bg);
     color: var(--text-color);
 }
-.file-path-display::-webkit-scrollbar {
-    width: 12px;
-}
-.file-path-display::-webkit-scrollbar-track {
-    background: var(--scrollbar-track);
-    border-radius: 4px;
-}
-.file-path-display::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb);
-    border-radius: 4px;
-    border: 2px solid var(--scrollbar-track);
-}
-.file-path-display::-webkit-scrollbar-thumb:hover {
-    background: var(--scrollbar-thumb-hover);
-}
 .file-path-display:hover {
     animation-play-state: paused;
 }
@@ -430,29 +415,29 @@ input[type="file"] {
 }
 
 /* スクロールバー設定 */
-textarea::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+.file-path-display::-webkit-scrollbar,
+#text-input::-webkit-scrollbar,
+#speaker::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
 }
-
-textarea::-webkit-scrollbar-track {
+.file-path-display::-webkit-scrollbar-track,
+#text-input::-webkit-scrollbar-track,
+#speaker::-webkit-scrollbar-track {
     background: var(--scrollbar-track);
     border-radius: 4px;
 }
-
-textarea::-webkit-scrollbar-thumb {
+.file-path-display::-webkit-scrollbar-thumb,
+#text-input::-webkit-scrollbar-thumb,
+#speaker::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
     border-radius: 4px;
     border: 2px solid var(--scrollbar-track);
 }
-
-textarea::-webkit-scrollbar-thumb:hover {
+.file-path-display::-webkit-scrollbar-thumb:hover,
+#text-input::-webkit-scrollbar-thumb:hover,
+#speaker::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-thumb-hover);
-}
-
-textarea {
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 #font-size-select {
@@ -750,7 +735,6 @@ table {
     font-size: 0.7em;
 }
 .sub-title {
-    text-decoration: underline;
     background-color: var(--subtitle-bg);
 }
 .body-table td.no-data { 
