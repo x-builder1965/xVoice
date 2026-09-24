@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.55.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.56.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -641,9 +641,7 @@ async function initEngine() {
         await handleConnectToggle();
     }
 
-    if (typeof moveCursorToLineStart === 'function') {
-        moveCursorToLineStart(currentLineIndex, true);
-    }
+    moveCursorToLineStart(currentLineIndex, true);
 }
 
 // 🔲window イベントリスナー登録🔲
@@ -1305,16 +1303,6 @@ function registerBtnUnityClick() {
         textInput.value = newText;
         textInput.dispatchEvent(new Event('input', { bubbles: true }));
 
-        // --------------------------------------------------
-        // カーソル位置の復元および元の行のハイライト処理
-        // --------------------------------------------------
-        // 1. 元のカーソル位置が含まれる行の開始位置と終了位置を計算
-        /* const lineStart = newText.lastIndexOf('\n', cursorPos - 1) + 1;
-        let lineEnd = newText.indexOf('\n', cursorPos);
-        if (lineEnd === -1) {
-            lineEnd = newText.length;
-        } */
-
         // 2. 要素へフォーカスを当て、該当行を選択（ハイライト表示）
         textInput.focus();
         textInput.setSelectionRange(cursorPos, cursorPos);
@@ -1783,7 +1771,6 @@ function getServerAddress() {
     return (inputAddress?.value.trim() || DEFAULT_HOST).replace(/\/$/, '');
 }
 
-// 🔲設定・適用ロジック関数群🔲
 // テキスト方向反映
 function applyTextDirection(direction) {
     if (!textInput) return;
@@ -1942,8 +1929,6 @@ function updateButtonStates(playing) {
     if (btnFileClear) btnFileClear.disabled = playing || isGenerating;
     if (btnFolderSelect) btnFolderSelect.disabled = playing || isGenerating;
     if (btnFileSelect) btnFileSelect.disabled = playing || isGenerating;
-    // if (fontSizeSelect) fontSizeSelect.disabled = playing || isGenerating;
-    // if (writingModeSelect) writingModeSelect.disabled = playing || isGenerating;
     if (textInput) textInput.readOnly = playing || isGenerating;
 
     renderPlaylistUI();
@@ -1969,8 +1954,6 @@ function resetGenerateButton() {
     if (btnFileSelect) btnFileSelect.disabled = false;
     if (btnFolderSelect) btnFolderSelect.disabled = false;
     if (btnFileClear) btnFileClear.disabled = false;
-    // if (fontSizeSelect) fontSizeSelect.disabled = false;
-    // if (writingModeSelect) writingModeSelect.disabled = false;
     if (textInput) textInput.readOnly = false;
 }
 
@@ -2058,18 +2041,6 @@ function stopPlayback() {
 async function playLineByLine(fromStart = false) {
     // 自身のセッションIDを発行して保持
     const currentSession = ++playSessionId;
-
-    // --- 【追加・修正箇所】 ---
-    // playingIndex が -1 の場合、filePathDisplay または localStorage から現在のインデックスを復元する
-    if (playingIndex === -1) {
-        if (filePathDisplay && filePathDisplay.value !== '') {
-            playingIndex = parseInt(filePathDisplay.value, 10);
-        } else {
-            const savedIndex = parseInt(localSettings[STORAGE_KEYS.PLAYLIST_INDEX], 10);
-            playingIndex = (!isNaN(savedIndex) && savedIndex >= 0) ? savedIndex : 0;
-        }
-    }
-
     const fullText = textInput.value.replace(/\r\n/g, '\n');
     const lines = fullText.split('\n');
 
@@ -2314,8 +2285,6 @@ async function generateFullTextMp3() {
     if (btnFolderSelect) btnFolderSelect.disabled = true;
     if (btnFileSelect) btnFileSelect.disabled = true;
     if (btnFileClear) btnFileClear.disabled = true;
-    // if (fontSizeSelect) fontSizeSelect.disabled = true;
-    // if (writingModeSelect) writingModeSelect.disabled = true;
     if (textInput) textInput.readOnly = true;
 
     showProgressBar('mp3');
@@ -2339,10 +2308,8 @@ async function generateFullTextMp3() {
             moveCursorToLineStart(originalLineIndex, true);
 
             const progressPercent = Math.round(((i + 1) / targets.length) * 100);
-
             if (statusDisplay) statusDisplay.textContent = `音声生成中 (${i + 1}/${targets.length} 行目 - ${progressPercent}%)`;
-            if (mp3ProgressBar) mp3ProgressBar.value = progressPercent;
-
+            updateProgressUI(mp3ProgressBar, i, targets.length, '行');
             const buffer = await fetchAudioBuffer(text, speakerId);
 
             if (isGenerateCanceled) {
@@ -2357,8 +2324,7 @@ async function generateFullTextMp3() {
         if (statusDisplay) statusDisplay.textContent = '合成音声（mp3）を生成中...';
 
         let defaultFilename = 'xVoice生成.mp3';
-        // playingIndex を元に現在の項目を取得（保存時は localStorage または playingIndex を使用）
-        const currentIndex = playingIndex >= 0 ? playingIndex : parseInt(localSettings[STORAGE_KEYS.PLAYLIST_INDEX], 10);
+        const currentIndex = playingIndex;
         const currentItem = playlist ? playlist[currentIndex] : null;
         
         if (currentItem && currentItem.path) {
@@ -2397,9 +2363,7 @@ async function generateFullTextMp3() {
             localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, nextIndex);
             
             // 次のプレイリスト項目のテキスト読み込み処理（環境に合わせて実装関数を呼び出し）
-            if (typeof loadPlaylistItem === 'function') {
-                await loadPlaylistItem(nextIndex);
-            }
+            await loadPlaylistItem(nextIndex);
 
             // 少し間隔を空けて次のテキストの自動生成を開始
             setTimeout(() => {
@@ -2418,7 +2382,6 @@ async function generateFullTextMp3() {
     }
 }
 
-// 🔲カーソル指定・レイアウト計算ヘルパー関数🔲
 // カーソル開始位置設定
 function moveCursorToLineStart(lineIndex, highlight = isPlaying) {
     if (!textInput) return;
@@ -2534,11 +2497,7 @@ function getShortPath(fullPath) {
 function renderPlaylistUI() {
     if (!filePathDisplay) return;
 
-    // 現在選択されている値を保持（再描画後の復元用）
-    const previousSelectedValue = filePathDisplay.value;
-
     filePathDisplay.innerHTML = '';
-
     if (!playlist || playlist.length === 0) {
         const option = document.createElement('option');
         option.value = '';
@@ -2559,27 +2518,19 @@ function renderPlaylistUI() {
         filePathDisplay.appendChild(option);
     });
 
-    // 2. 選択位置の決定（再生中があればその位置、なければ前の選択位置、デフォルトは0）
-    let targetIndex = 0;
-    if (playingIndex !== -1) {
-        targetIndex = playingIndex;
-    } else if (previousSelectedValue !== '' && playlist[previousSelectedValue]) {
-        targetIndex = parseInt(previousSelectedValue, 10);
-    }
-
     // 選択状態を確定
-    filePathDisplay.value = targetIndex;
+    filePathDisplay.value = playingIndex;
 
     // 3. アイコン更新関数を使用して状態に応じたアイコン（▶️ / 🎤 / ⏸️）を反映
-    if (isPlaying && targetIndex !== -1) {
+    if (isPlaying) {
         // 再生中
-        updatePlaylistDisplayIcons(targetIndex, 'play');
-    } else if (typeof isGenerating !== 'undefined' && isGenerating && targetIndex !== -1) {
+        updatePlaylistDisplayIcons(playingIndex, 'play');
+    } else if (typeof isGenerating !== 'undefined' && isGenerating) {
         // 生成中
-        updatePlaylistDisplayIcons(targetIndex, 'generate');
+        updatePlaylistDisplayIcons(playingIndex, 'generate');
     } else  {
         // 停止中（選択中のパスに ⏸️ を設定）
-        updatePlaylistDisplayIcons(targetIndex, 'stop');
+        updatePlaylistDisplayIcons(playingIndex, 'stop');
     }
 }
 
@@ -2911,7 +2862,7 @@ function pruneAudioCache(limit) {
     updateCacheCountUI(cacheLimitSlider.value);
 
     // バッファバー等のプログレス表示を更新（利用可能な場合）
-    if (typeof updateBufferProgress === 'function' && typeof lines !== 'undefined') {
+    if (typeof lines !== 'undefined') {
         updateBufferProgress(lines.length);
     }
 }
@@ -2941,37 +2892,15 @@ async function loadPlaylistItem(index, isAutoPlay = false) {
 
     const item = playlist[index];
     filePathDisplay.value = index;
+    playingIndex = index;
 
     localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, index);
     await loadFileContent(item.path, item.content);
-
-    playingIndex = index;
     renderPlaylistUI();
-    filePathDisplay.value = index;
 
     // 自動再生指示がある場合
     if (isAutoPlay) {
         startPlayback(); // 既存の再生開始関数を呼出
-    }
-}
-
-// 1つのテキスト再生完了時に呼び出すフック処理（順次再生用）
-async function onCurrentTextEnded() {
-    // プレイリスト内に次のテキストが存在する場合
-    if (playingIndex !== -1 && playingIndex + 1 < playlist.length) {
-        // テキスト変更チェック & 保存ダイアログ表示
-        const selectedIndex = parseInt(filePathDisplay?.value, 10);
-        await saveFileContent(selectedIndex, textInput.value);
-
-        const nextIndex = playingIndex + 1;
-        await loadPlaylistItem(nextIndex, true);
-    } else {
-        // 全ファイルの再生完了
-        isPlaying = false;
-        playingIndex = 0;
-        if (filePathDisplay && playlist.length > 0) {
-            filePathDisplay.value = 0;
-        }
     }
 }
 
@@ -3026,24 +2955,6 @@ function updatePlaylistDisplayIcons(activeIndex = -1, status = 'stop') {
     }
 }
 
-// ボタンの有効/無効状態を更新する補助関数（必要に応じて組み込み）
-function updatePlaylistControlButtons() {
-    if (!playlist || playlist.length === 0) {
-        if (btnPrevFile) btnPrevFile.disabled = true;
-        if (btnNextFile) btnNextFile.disabled = true;
-        return;
-    }
-
-    // 先頭ファイルでは前ファイルボタンを無効化
-    if (btnPrevFile) {
-        btnPrevFile.disabled = (playingIndex <= 0);
-    }
-    // 末尾ファイルでは次ファイルボタンを無効化
-    if (btnNextFile) {
-        btnNextFile.disabled = (playingIndex >= playlist.length - 1);
-    }
-}
-
 // 現在選択中の再生速度を取得
 function getSelectedPlaybackRate() {
     return speedSelect ? parseFloat(speedSelect.value) || 1.0 : 1.0;
@@ -3070,7 +2981,5 @@ function changePlaybackSpeed(direction) {
 
     applyPlaybackRate();
     // 選択値をトースト表示などでユーザーに通知（実装がある場合）
-    if (typeof showToast === 'function') {
-        showToast(`再生速度: ${speedSelect.value}x`);
-    }
+    showToast(`再生速度: ${speedSelect.value}x`);
 }
