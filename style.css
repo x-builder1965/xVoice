@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.59.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.60.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -420,6 +420,7 @@ input[type="file"] {
 #speaker::-webkit-scrollbar {
     width: 12px;
     height: 12px;
+    cursor: default; /* スクロールバー全体の基本カーソルをデフォルト（矢印）に設定 */
 }
 .file-path-display::-webkit-scrollbar-track,
 #text-input::-webkit-scrollbar-track,
@@ -433,6 +434,7 @@ input[type="file"] {
     background: var(--scrollbar-thumb);
     border-radius: 4px;
     border: 2px solid var(--scrollbar-track);
+    cursor: default; /* サム（つまみ）にホバーした際もデフォルト（矢印）を維持 */
 }
 .file-path-display::-webkit-scrollbar-thumb:hover,
 #text-input::-webkit-scrollbar-thumb:hover,
