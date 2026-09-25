@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.61.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.62.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -1464,6 +1464,12 @@ function registerBtnSpeakClick() {
         } else {
             playLineByLine();
         }
+    });
+
+    // 右クリック時
+    document.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); // デフォルトの右クリックメニュー（コンテキストメニュー）を抑制
+        btnSpeak.click();
     });
 }
 
