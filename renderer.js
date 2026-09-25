@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.58.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.59.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -1748,7 +1748,7 @@ function updateConnectionUI(connected) {
     if (connected) {
         btnConnect.textContent = '🔄';
         btnConnect.classList.add('connect-active');
-        btnConnect.title = 'AivisSpeech Engine切断 (Ctrl+n)';
+        btnConnect.setAttribute('data-tooltip','AivisSpeech Engine切断 (Ctrl+n)');
         btnConnect.disabled = false;
         inputAddress.disabled = true; // 接続時はアドレス編集不可
         
@@ -1759,7 +1759,7 @@ function updateConnectionUI(connected) {
     } else {
         btnConnect.textContent = '🔄';
         btnConnect.classList.remove('connect-active');
-        btnConnect.title = 'AivisSpeech Engine接続 (Ctrl+n)';
+        btnConnect.setAttribute('data-tooltip','AivisSpeech Engine接続 (Ctrl+n)');
         btnConnect.disabled = false;
         inputAddress.disabled = false; // 未接続時はアドレス編集可能
         
@@ -1914,12 +1914,12 @@ function updateButtonStates(playing) {
     if (btnSpeak) {
         if (playing) {
             btnSpeak.textContent = '⏸️';
-            btnSpeak.title = '停止 (Ctrl+p)';
+            btnSpeak.setAttribute('data-tooltip','停止 (Ctrl+p)');
             btnSpeak.classList.add('play-active')
             textInput.style.cursor = 'pointer';
         } else {
             btnSpeak.textContent = '▶️';
-            btnSpeak.title = '再生 (Ctrl+p)';
+            btnSpeak.setAttribute('data-tooltip','再生 (Ctrl+p)');
             btnSpeak.classList.remove('play-active');
             textInput.style.cursor = 'text';
         }
@@ -1945,7 +1945,7 @@ function resetGenerateButton() {
     if (btnGenerate) {
         btnGenerate.textContent = '🎤';
         btnGenerate.classList.remove('generate-active');
-        btnGenerate.title = '音声生成 (Ctrl+g)';
+        btnGenerate.setAttribute('data-tooltip','音声生成 (Ctrl+g)');
         btnGenerate.disabled = !isEngineReady || !textInput.value.trim();
     }
     if (speakerSelect) speakerSelect.disabled = false;
@@ -2277,7 +2277,7 @@ async function generateFullTextMp3() {
 
     btnGenerate.textContent = '🎤';
     btnGenerate.classList.add('generate-active');
-    btnGenerate.title = '生成中止 (Ctrl+g)';
+    btnGenerate.setAttribute('data-tooltip','生成中止 (Ctrl+g)');
     if (btnGenerate) btnGenerate.disabled = false;
     if (btnPrevFile) btnPrevFile.disabled = true;
     if (btnPrevLine) btnPrevLine.disabled = true;
@@ -2884,7 +2884,7 @@ function applyVolumeState(baseVol, isMuted) {
     volumeDisplay.textContent = percentStr;
     volumeSlider.value = Math.round(activeVolume * 100);
     btnMute.textContent = isMuted ? '🔇' : '🔊';
-    btnMute.title = isMuted ? 'ミュート解除 (Ctrl+m)' : 'ミュート設定 (Ctrl+m)';
+    btnMute.setAttribute('data-tooltip',isMuted ? 'ミュート解除 (Ctrl+m)' : 'ミュート設定 (Ctrl+m)');
 
     // 状態の保存
     localStorageSetItemAndFile(STORAGE_KEYS.IS_MUTED, isMuted);

@@ -1,7 +1,7 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.58.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.59.0';
  --------------------------------------------------------------------- -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -23,7 +23,7 @@
                     </h1>
                     <div class="ver-title">Ver1.00.0</div>
                 </div>
-                <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替" title="テーマ切替 (Ctrl+t)">☀️</button>
+                <button id="btn-theme" class="theme-toggle" aria-label="テーマ切替" data-tooltip="テーマ切替 (Ctrl+t)">☀️</button>
             </div>
 
             <!-- トースト通知用オーバーレイ -->
@@ -38,10 +38,10 @@
             <div class="field">
                 <div class="file-input-group">
                     <select id="speaker"><option value="">エンジン起動確認中...</option></select>
-                    <button id="btn-connect" class="file-select-btn" type="button" title="AivisSpeech Engine接続 (Ctrl+n)">🔄</button>
-                    <input type="text" id="input-address" placeholder="http://127.0.0.1:10101" title="サーバーアドレス">
+                    <button id="btn-connect" class="file-select-btn" type="button" data-tooltip="AivisSpeech Engine接続 (Ctrl+n)">🔄</button>
+                    <input type="text" id="input-address" placeholder="http://127.0.0.1:10101" data-tooltip="サーバーアドレス">
                     <!-- キャッシュ表示群 -->
-                    <button type="button" id="cache-btn" class="cache-btn" title="キャッシュ量変更（Ctrl+↑↓）">👁️</button>
+                    <button type="button" id="cache-btn" class="cache-btn" data-tooltip="キャッシュ量変更（Ctrl+↑↓）">👁️</button>
                     <span id="cache-count-display" class="cache-count-display">  0/  0件</span>
                     <input type="range" id="cache-limit-slider" min="1" max="100" value="10" class="cache-limit-slider">
                 </div>
@@ -50,29 +50,29 @@
             <!-- ファイル選択・テキスト設定コントロール部 -->
             <div class="field">
                 <div class="file-input-group">
-                    <select id="font-size-select" title="文字サイズ変更">
+                    <select id="font-size-select" data-tooltip="文字サイズ変更">
                         <option value="12px">小</option>
                         <option value="16px" selected>中</option>
                         <option value="20px">大</option>
                         <option value="24px">特大</option>
                     </select>
-                    <select id="writing-mode-select" title="テキスト向き">
+                    <select id="writing-mode-select" data-tooltip="テキスト向き">
                         <option value="horizontal-tb" selected>横向き</option>
                         <option value="vertical-rl">縦向き</option>
                     </select>
-                    <button id="btn-folder-select" class="btn-primary" title="フォルダ選択 (Ctrl+d)">📁</button>
-                    <button id="btn-file-select" class="btn-primary" title="ファイル選択 (Ctrl+f)">🗒️</button>
-                    <select id="file-path-display" class="file-path-display" title="プレイリスト">
+                    <button id="btn-folder-select" class="btn-primary" data-tooltip="フォルダ選択 (Ctrl+d)">📁</button>
+                    <button id="btn-file-select" class="btn-primary" data-tooltip="ファイル選択 (Ctrl+f)">🗒️</button>
+                    <select id="file-path-display" class="file-path-display" data-tooltip="プレイリスト">
                         <option value="">選択されていません</option>
                     </select>
-                    <button id="btn-ruby" class="btn-primary" title="読み編集 (Ctrl+h)">🖊️</button>
-                    <button id="btn-unity" class="btn-primary" title="読み統一 (Ctrl+u)">🔠</button>
-                    <button id="btn-search" class="btn-primary" title="編集検索 (Ctrl+b)">🔍</button>
+                    <button id="btn-ruby" class="btn-primary" data-tooltip="読み編集 (Ctrl+h)">🖊️</button>
+                    <button id="btn-unity" class="btn-primary" data-tooltip="読み統一 (Ctrl+u)">🔠</button>
+                    <button id="btn-search" class="btn-primary" data-tooltip="編集検索 (Ctrl+b)">🔍</button>
                     <div class="separator">　</div>
-                    <button id="btn-save" class="btn-primary" title="テキスト保存 (Ctrl+s)">💾</button>
-                    <button id="btn-playlist-save" class="btn-primary" title="プレイリスト保存 (Ctrl+l)">📚</button>
+                    <button id="btn-save" class="btn-primary" data-tooltip="テキスト保存 (Ctrl+s)">💾</button>
+                    <button id="btn-playlist-save" class="btn-primary" data-tooltip="プレイリスト保存 (Ctrl+l)">📚</button>
                     <div class="separator">　</div>
-                    <button id="btn-file-clear" class="file-select-btn" type="button" title="テキストクリア (Ctrl+c)">🗑️</button>
+                    <button id="btn-file-clear" class="file-select-btn" type="button" data-tooltip="テキストクリア (Ctrl+c)">🗑️</button>
                 </div>
             </div>
 
@@ -85,16 +85,16 @@
             <div class="field">
                 <div class="progress-wrapper">
                     <!-- 再生・生成ボタン群 -->
-                    <button id="btn-prev-file" class="btn-primary" title="前ファイル (Ctrl+PgUp)">⏮️</button>
-                    <button id="btn-prev-line" class="btn-primary" title="前１０行 (Ctrl+←)">⏪</button>
-                    <button id="btn-speak" class="btn-primary" title="再生 (Ctrl+Space)">▶️</button>
-                    <button id="btn-next-line" class="btn-primary" title="次１０行 (Ctrl+→)">⏩</button>
-                    <button id="btn-next-file" class="btn-primary" title="次ファイル (Ctrl+PgDown)">⏭️</button>
+                    <button id="btn-prev-file" class="btn-primary" data-tooltip="前ファイル (Ctrl+PgUp)">⏮️</button>
+                    <button id="btn-prev-line" class="btn-primary" data-tooltip="前１０行 (Ctrl+←)">⏪</button>
+                    <button id="btn-speak" class="btn-primary" data-tooltip="再生 (Ctrl+Space)">▶️</button>
+                    <button id="btn-next-line" class="btn-primary" data-tooltip="次１０行 (Ctrl+→)">⏩</button>
+                    <button id="btn-next-file" class="btn-primary" data-tooltip="次ファイル (Ctrl+PgDown)">⏭️</button>
                     <div class="separator">　</div>
-                    <button id="btn-generate" class="btn-secondary" title="音声生成 (Ctrl+g)">🎤</button>
+                    <button id="btn-generate" class="btn-secondary" data-tooltip="音声生成 (Ctrl+g)">🎤</button>
                     <div class="separator">　</div>
                     <!-- 音量コントロール群 -->
-                    <button type="button" id="btn-mute" class="btn-mute" title="ミュート設定（Ctrl+m）">🔊</button>
+                    <button type="button" id="btn-mute" class="btn-mute" data-tooltip="ミュート設定（Ctrl+m）">🔊</button>
                     <span id="volume-display" class="volume-display">  0%</span>
                     <input type="range" id="volume-slider" min="0" max="100" value="20" class="volume-slider">
                     <!-- 再生速度変更 -->
@@ -133,7 +133,7 @@
         <div class="help-container">
             <div class="header-row">
                 <h1>xVoice -テキスト音声読み上げ- Ver1.00.0 ヘルプ</h1>
-                <button id="helpCloseBtn" class="btn-Close" title="ヘルプ閉じる（Escape）">❌</button>
+                <button id="helpCloseBtn" class="btn-Close" data-tooltip="ヘルプ閉じる（Escape）">❌</button>
             </div>
             <div id="helpTableContainer" class="help-table-container"></div>
         </div>
@@ -142,7 +142,7 @@
         <div class="changelog-container">
             <div class="header-row">
                 <h1>xVoice -テキスト音声読み上げ- Ver1.00.0 変更履歴</h1>
-                <button id="changelogCloseBtn" class="btn-Close" title="変更履歴閉じる（Escape）">❌</button>
+                <button id="changelogCloseBtn" class="btn-Close" data-tooltip="変更履歴閉じる（Escape）">❌</button>
             </div>
             <div id="appConfigContainer" class="app-config-container" style="display: none;"></div>
             <div id="changelogContent" class="changelog-Content"></div>

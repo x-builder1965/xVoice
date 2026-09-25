@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver1.57.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver1.59.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -509,13 +509,12 @@ button, select, input {
 }
 
 /* --- カスタムツールチップ実装 --- */
-[title] {
+[data-tooltip] {
     position: relative;
 }
-
-/* ツールチップ本体（ボタン上部に黒背景で表示） */
-[title]::after {
-    content: attr(title);
+/* ツールチップ本体（ボタン上部に表示） */
+[data-tooltip]::after {
+    content: attr(data-tooltip); /* title から data-tooltip に変更 */
     position: absolute;
     bottom: 125%;
     left: 50%;
@@ -535,9 +534,8 @@ button, select, input {
     z-index: 1000;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
-
 /* ボタンホバー時にツールチップを表示 */
-[title]:hover::after {
+[data-tooltip]:hover::after {
     opacity: 1;
     visibility: visible;
 }
