@@ -181,6 +181,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ☀️／🌙 テーマ設定の復元
     setupTheme();
 
+    // 🔲コールバック処理🔲
+    // エンジン起動状況のコールバック
+    registerOnEngineProgress();
+    // プレイリスト作成・追加状況のコールバック
+    registerOnPlaylistProgress();
+
     // 🔲window イベントリスナー登録🔲
     // 画面のサイズ変更イベント
     registerWindowResize();
@@ -275,15 +281,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // キャッシュ数変更バーの変更イベント
     registerCacheLimitSliderChange();
 
-    // 🔲コールバック処理🔲
-    // エンジン起動状況のコールバック
-    registerOnEngineProgress();
-    // プレイリスト作成・追加状況のコールバック
-    registerOnPlaylistProgress();
-
     // 🔲初期設定🔲
     // エンジンの初期設定（※必ず初期処理、イベントリスナー登録の後に配置）
     await initEngine();
+
     // 進捗バー初期表示
     showProgressBar('text');
 });
@@ -528,8 +529,8 @@ function setupCacheLimit() {
             cacheLimitSlider.value = PREFETCH_LINES;
             localStorageSetItemAndFile(STORAGE_KEYS.CACHE_LIMIT, cacheLimitSlider.value);
         }
-        // 初期表示（実キャッシュ数を自動反映）
-        updateCacheCountUI(cacheLimitSlider.value);
+        // キャッシュ量表示、キャッシュ状況バー表示の更新
+        updateCacheDisplay();
     }
 }
 
@@ -1631,7 +1632,8 @@ function registerToastMessageMouseleave() {
 function registerCacheLimitSliderInput() {
     // 操作中 (input イベント): スライダー値の変更時も現在の実キャッシュ数を保持して更新
     cacheLimitSlider.addEventListener('input', (e) => {
-        updateCacheCountUI(e.target.value);
+        // キャッシュ量表示、キャッシュ状況バー表示の更新
+        updateCacheDisplay();
     });
 }
 
@@ -2203,7 +2205,8 @@ async function playLineByLine(fromStart = false) {
 
                 // 再生完了した過去行のキャッシュを自動解放
                 audioCache.delete(i);
-                updateCacheCountUI(cacheLimitSlider.value);
+                // キャッシュ量表示、キャッシュ状況バー表示の更新
+                updateCacheDisplay();
 
                 if (isLineJumped) {
                     isLineJumped = false;
@@ -2622,17 +2625,28 @@ function clearAudioCache() {
     cancelAllPendingFetches();
 
     audioCache.clear();
+    // キャッシュ量表示、キャッシュ状況バー表示の更新
+    updateCacheDisplay();
+}
+
+// キャッシュ量表示、キャッシュ状況バー表示の更新
+function updateCacheDisplay() {
+    // キャッシュ量表示
+    const fullText = textInput.value.replace(/\r\n/g, '\n');
+    const lines = fullText.length > 0 ? fullText.split('\n') : [];
+    updateBufferProgress(lines.length);
+    // キャッシュ状況バー表示
     updateCacheCountUI(cacheLimitSlider.value);
-    if (textBufferProgressBar) {
-        const fullText = textInput.value.replace(/\r\n/g, '\n');
-        const lines = fullText.split('\n');
+}
 
-        const currentPercent = lines.length > 0
-            ? Math.round((currentLineIndex / lines.length) * 100)
-            : 0;
+// UI表示フォーマット関数
+function updateCacheCountUI(limitValue, currentCount = audioCache.size) {
+    if (!cacheCountDisplay) return;
 
-        textBufferProgressBar.value = currentPercent;
-    }
+    const paddedCurrent = String(currentCount).padStart(3, ' ');
+    const paddedLimit = String(limitValue).padStart(3, ' ');
+
+    cacheCountDisplay.textContent = `${paddedCurrent}/${paddedLimit}件`;
 }
 
 // キャッシュの保有状況に応じてバッファ用プログレスバーを表示更新する
@@ -2648,7 +2662,6 @@ function updateBufferProgress(totalLines) {
     const bufferPercent = Math.min(Math.round(((maxCachedIndex + 1) / totalLines) * 100), 100);
     textBufferProgressBar.value = bufferPercent;
 }
-
 
 // バックグラウンドで常に PREFETCH_LINES 分のキャッシュ（生成）を維持する Producer
 async function triggerPrefetch(lines, speakerId, sessionId) {
@@ -2671,8 +2684,8 @@ async function triggerPrefetch(lines, speakerId, sessionId) {
             fetchAndCacheLine(targetIndex, textToFetch, speakerId, sessionId)
                 .then(() => {
                     if (sessionId === playSessionId) {
-                        updateBufferProgress(lines.length);
-                        updateCacheCountUI(cacheLimitSlider.value);
+                        // キャッシュ量表示、キャッシュ状況バー表示の更新
+                        updateCacheDisplay();
                     }
                 })
                 .catch(() => {});
@@ -2840,20 +2853,9 @@ function updateProgressUI(progressBar, current, max, unit = '') {
     }
 }
 
-// UI表示フォーマット関数
-function updateCacheCountUI(limitValue, currentCount = audioCache.size) {
-    if (!cacheCountDisplay) return;
-
-    const paddedCurrent = String(currentCount).padStart(3, ' ');
-    const paddedLimit = String(limitValue).padStart(3, ' ');
-
-    cacheCountDisplay.textContent = `${paddedCurrent}/${paddedLimit}件`;
-}
-
 // 設定された上限数を超過したキャッシュを古い順に削除する
 function pruneAudioCache(limit) {
     if (audioCache.size <= limit) {
-        updateCacheCountUI(cacheLimitSlider.value);
         return;
     }
 
@@ -2878,11 +2880,8 @@ function pruneAudioCache(limit) {
         deletedCount++;
     }
 
-    updateCacheCountUI(cacheLimitSlider.value);
-
-    if (typeof lines !== 'undefined') {
-        updateBufferProgress(lines.length);
-    }
+    // キャッシュ量表示、キャッシュ状況バー表示の更新
+    updateCacheDisplay();
 }
 
 // 音量状態のUIおよび各プレイヤーへの適用処理
@@ -3037,6 +3036,8 @@ function fetchAndCacheLine(index, text, speakerId, sessionId) {
             return data;
         } catch (err) {
             audioCache.delete(index);
+            // キャッシュ量表示、キャッシュ状況バー表示の更新
+            updateCacheDisplay();
             throw err;
         } finally {
             if (typeof activeFetchCount !== 'undefined') activeFetchCount--;
@@ -3044,7 +3045,8 @@ function fetchAndCacheLine(index, text, speakerId, sessionId) {
     })();
 
     audioCache.set(index, fetchPromise);
-    updateCacheCountUI(cacheLimitSlider.value);
+    // キャッシュ量表示、キャッシュ状況バー表示の更新
+    updateCacheDisplay();
 
     return fetchPromise;
 }
