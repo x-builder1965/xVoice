@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.59.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.61.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -52,6 +52,7 @@ const disableKeyMap = new Set([
     'ctrl+a',
 ]);
 const PREFETCH_LINES = 10;       // 常に何行先までキャッシュ（先読み）を維持するか
+const MAX_CONCURRENT_FETCH = 5;  // API負荷を抑えるための最大同時リクエスト数
 const audioCache = new Map();    // 音声データキャッシュ (key: lineIndex, value: audioData)
 const settingsFilePath = getUserSettingsPath(); // 設定ファイルパス取得
 
@@ -133,6 +134,8 @@ let toastRemainingTime = 0;      // トースト一時停止時の残り表示�
 let toastStartTime = 0;          // トースト表示開始タイムスタンプ
 let isPrefetching = false;       // ループ重複実行防止フラグ
 let playSessionId = 0;           // セッション管理用ID（競合防止）
+let activeFetchCount = 0;           // 現在通信中のリクエスト数
+let currentAbortController = null; // 通信中断用コントローラー
 
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲初期設定🔲
@@ -1032,26 +1035,19 @@ function registerTextInputClick() {
 // 📁 フォルダ選択のクリックイベント
 function registerBtnFolderSelectClick() {
     btnFolderSelect?.addEventListener('click', async () => {
-        // テキスト変更チェック & 保存ダイアログ表示
         const selectedIndex = parseInt(filePathDisplay?.value, 10);
         await saveFileContent(selectedIndex, textInput.value);
 
         const fileDataList = await window.api.selectFolder();
-        
-        // キャンセルまたは該当ファイルがない場合
         if (!fileDataList || fileDataList.length === 0) return;
 
-        // ファイル/フォルダ変更時のリセット処理
         if (isPlaying) {
-            stopPlayback(); // 再生中の場合は停止
+            stopPlayback();
         }
-        clearAudioCache();   // キャッシュクリア
-        resetProgressBars(); // 進捗バーを0%にリセット
+        clearAudioCache();
+        resetProgressBars();
 
-        // パスの昇順で並べ替え実施 (自然順ソート)
         fileDataList.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' }));
-
-        // 取得したファイル配列をプレイリストに反映
         addFilesToPlaylist(fileDataList);
     });
 }
@@ -1059,21 +1055,18 @@ function registerBtnFolderSelectClick() {
 // 🗒️ファイル選択のクリックイベント
 function registerBtnFileSelectClick() {
     btnFileSelect?.addEventListener('click', async () => {
-        // テキスト変更チェック & 保存ダイアログ表示
         const selectedIndex = parseInt(filePathDisplay?.value, 10);
         await saveFileContent(selectedIndex, textInput.value);
 
         const fileDataList = await window.api.selectFile();
         if (!fileDataList || fileDataList.length === 0) return;
 
-        // ファイル変更時のリセット処理
         if (isPlaying) {
-            stopPlayback(); // 再生中の場合は停止
+            stopPlayback();
         }
-        clearAudioCache();   // キャッシュクリア
-        resetProgressBars(); // 進捗バーを0%にリセット
+        clearAudioCache();
+        resetProgressBars();
 
-        // 取得したファイル配列をプレイリストに反映
         addFilesToPlaylist(fileDataList);
     });
 }
@@ -1081,7 +1074,6 @@ function registerBtnFileSelectClick() {
 // 🗑️クリアのクリックイベント
 function registerBtnFileClearClick() {
     btnFileClear?.addEventListener('click', async () => {
-        // テキスト変更チェック & 保存ダイアログ表示
         const selectedIndex = parseInt(filePathDisplay?.value, 10);
         await saveFileContent(selectedIndex, textInput.value);
 
@@ -1089,7 +1081,6 @@ function registerBtnFileClearClick() {
         isPlaying = false;
         playingIndex = 0;
 
-        // <select>（プレイリスト表示）を「選択されていません」のみに初期化
         if (filePathDisplay) {
             filePathDisplay.innerHTML = '<option value="">選択されていません</option>';
             filePathDisplay.value = '';
@@ -1125,7 +1116,6 @@ function registerTextInputInput() {
             btnGenerate.disabled = !isEngineReady || !currentText.trim();
         }
 
-        // テキストの変更表示
         if (currentText !== textBackup) {
             btnSave.classList.add('change-active');
         } else {
@@ -1647,15 +1637,10 @@ function registerCacheLimitSliderInput() {
 
 // キャッシュ数変更バーの変更イベント
 function registerCacheLimitSliderChange() {
-// 確定時 (change イベント): localStorageへの保存とキャッシュ溢れ時の削除を実行
     cacheLimitSlider.addEventListener('change', (e) => {
         const newLimit = parseInt(e.target.value, 10);
         currentCacheLimit = newLimit;
-        
-        // localStorage に保存
         localStorageSetItemAndFile(STORAGE_KEYS.CACHE_LIMIT, newLimit);
-        
-        // キャッシュ整理の実行
         pruneAudioCache(newLimit);
     });
 }
@@ -1834,14 +1819,11 @@ function getCursorLineIndex() {
 
 // カーソル（再生位置）変更時の処理
 function handleCursorChange() {
-    // 修正前: if (!isPlaying) return;  ← これを削除
-
     const targetLineIndex = getCursorLineIndex();
     if (targetLineIndex !== currentLineIndex) {
         currentLineIndex = targetLineIndex;
         localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
 
-        // キャッシュとバッファ表示をクリア＆移動後の位置に同期
         clearAudioCache();
 
         if (isPlaying) {
@@ -2043,8 +2025,14 @@ function stopPlayback() {
 
 // 引数 fromStart を追加（デフォルトは false：カーソル位置から開始）
 async function playLineByLine(fromStart = false) {
-    // 自身のセッションIDを発行して保持
     const currentSession = ++playSessionId;
+    
+    // 【課題2対応】新しいセッション開始時に既存の Fetch リクエストを全て中断
+    if (typeof currentAbortController !== 'undefined' && currentAbortController) {
+        currentAbortController.abort();
+    }
+    currentAbortController = new AbortController();
+
     const fullText = textInput.value.replace(/\r\n/g, '\n');
     const lines = fullText.split('\n');
 
@@ -2055,7 +2043,6 @@ async function playLineByLine(fromStart = false) {
         previousText = fullText;
     }
 
-    // fromStart が true の場合は強制的に 0、そうでなければカーソル位置を取得
     currentLineIndex = fromStart ? 0 : getCursorLineIndex();
     localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, currentLineIndex);
 
@@ -2082,13 +2069,23 @@ async function playLineByLine(fromStart = false) {
     if (textProgressBar) textProgressBar.value = initialPercent;
     if (textBufferProgressBar) textBufferProgressBar.value = initialPercent;
 
-    triggerPrefetch(lines, currentSpeakerId);
+    // 非同期生成ループを開始
+    triggerPrefetch(lines, currentSpeakerId, currentSession);
 
     const players = [audioPlayer, audioPlayerNext];
     let activePlayerIndex = 0;
 
+    // 【課題1対応】各プレイヤーに紐づく URL 管理オブジェクト（参照保持用）
+    const playerBlobUrls = [null, null];
+
+    const safeRevokeUrl = (index) => {
+        if (playerBlobUrls[index]) {
+            URL.revokeObjectURL(playerBlobUrls[index]);
+            playerBlobUrls[index] = null;
+        }
+    };
+
     while (currentLineIndex < lines.length) {
-        // 他の停止・再再生によってセッションが変わっていたらループ中断
         if (isStopped || currentSession !== playSessionId) break;
 
         const i = currentLineIndex;
@@ -2108,104 +2105,143 @@ async function playLineByLine(fromStart = false) {
 
             try {
                 let audioData;
-                
-                if (audioCache.has(i)) {
-                    audioData = audioCache.get(i);
-                } else {
-                    showLoading(true);
-                    try {
-                        audioData = await fetchAudioBuffer(lineTrimmed, currentSpeakerId);
-                    } finally {
-                        showLoading(false);
+
+                // 生成キューに要求を出し、キャッシュ（Promise）の完了を待つ
+                triggerPrefetch(lines, currentSpeakerId, currentSession);
+
+                showLoading(true);
+                try {
+                    if (audioCache.has(i)) {
+                        audioData = await audioCache.get(i);
+                    } else {
+                        audioData = await fetchAndCacheLine(i, lineTrimmed, currentSpeakerId, currentSession);
                     }
+                } finally {
+                    showLoading(false);
                 }
 
-                triggerPrefetch(lines, currentSpeakerId);
-
-                // 停止→再開時の再キャッシュ防止
-                if (isLineJumped || currentSession !== playSessionId) {
+                if (isLineJumped || currentSession !== playSessionId || isStopped) {
                     if (isLineJumped) {
                         isLineJumped = false;
+                        
+                        // 【課題2対応】ジャンプ時も即座に旧通信を打ち切る
+                        if (currentAbortController) currentAbortController.abort();
+                        currentAbortController = new AbortController();
+
                         clearAudioCache();
                         stopAllAudioPlayers();
-                        triggerPrefetch(lines, currentSpeakerId);
+                        triggerPrefetch(lines, currentSpeakerId, currentSession);
                         continue;
                     }
                     break;
                 }
 
                 const currentPlayer = players[activePlayerIndex];
+                
+                // 【課題1対応】現プレイヤーの旧 Blob URL を安全に解放
+                safeRevokeUrl(activePlayerIndex);
+
                 const blob = new Blob([audioData], { type: 'audio/wav' });
-                const blobUrl = URL.revokeObjectURL ? URL.createObjectURL(blob) : URL.createObjectURL(blob);
+                const blobUrl = URL.createObjectURL(blob);
+                playerBlobUrls[activePlayerIndex] = blobUrl;
 
                 currentPlayer.src = blobUrl;
-
-                // 再生前に選択されている再生速度（playbackRate）を設定
                 currentPlayer.playbackRate = getSelectedPlaybackRate();
 
+                // ダブルバッファリング（次行のプレロード）
                 const nextLineIndex = i + 1;
-                const nextPlayer = players[1 - activePlayerIndex];
+                const nextPlayerIndex = 1 - activePlayerIndex;
+                const nextPlayer = players[nextPlayerIndex];
 
                 if (nextLineIndex < lines.length && audioCache.has(nextLineIndex)) {
-                    const nextAudioData = audioCache.get(nextLineIndex);
-                    const nextBlob = new Blob([nextAudioData], { type: 'audio/wav' });
-                    nextPlayer.src = URL.createObjectURL(nextBlob);
-                    nextPlayer.load();
+                    audioCache.get(nextLineIndex).then((nextAudioData) => {
+                        if (nextAudioData && currentSession === playSessionId) {
+                            // 【課題1対応】次プレイヤー用の旧 URL も解放してからセット
+                            safeRevokeUrl(nextPlayerIndex);
+
+                            const nextBlob = new Blob([nextAudioData], { type: 'audio/wav' });
+                            const nextBlobUrl = URL.createObjectURL(nextBlob);
+                            playerBlobUrls[nextPlayerIndex] = nextBlobUrl;
+
+                            nextPlayer.src = nextBlobUrl;
+                            nextPlayer.load();
+                        }
+                    }).catch(() => {});
                 }
 
+                // 【課題3対応】setInterval（ポーリング）を排し、イベント駆動（timeupdate / ended / error）で監視
                 await new Promise((resolve) => {
-                    const checkStopped = setInterval(() => {
-                        // セッションが変更された場合も即座に監視を解除して抜ける
+                    let isResolved = false;
+
+                    const cleanup = () => {
+                        if (isResolved) return;
+                        isResolved = true;
+                        currentPlayer.removeEventListener('timeupdate', checkStatus);
+                        currentPlayer.removeEventListener('ended', onEndedOrError);
+                        currentPlayer.removeEventListener('error', onEndedOrError);
+                        safeRevokeUrl(activePlayerIndex);
+                        resolve();
+                    };
+
+                    const checkStatus = () => {
                         if (isStopped || isLineJumped || currentSession !== playSessionId) {
-                            clearInterval(checkStopped);
-                            resolve();
+                            currentPlayer.pause();
+                            cleanup();
                         }
-                    }, 100);
-
-                    currentPlayer.onended = () => {
-                        clearInterval(checkStopped);
-                        URL.revokeObjectURL(blobUrl);
-                        resolve();
-                    };
-                    currentPlayer.onerror = () => {
-                        clearInterval(checkStopped);
-                        URL.revokeObjectURL(blobUrl);
-                        resolve();
                     };
 
-                    currentPlayer.play().catch(() => resolve());
+                    const onEndedOrError = () => {
+                        cleanup();
+                    };
+
+                    currentPlayer.addEventListener('timeupdate', checkStatus);
+                    currentPlayer.addEventListener('ended', onEndedOrError);
+                    currentPlayer.addEventListener('error', onEndedOrError);
+
+                    currentPlayer.play().catch(() => cleanup());
                 });
+
+                // 再生完了した過去行のキャッシュを自動解放
+                audioCache.delete(i);
+                updateCacheCountUI(cacheLimitSlider.value);
 
                 if (isLineJumped) {
                     isLineJumped = false;
+
+                    // 【課題2対応】ジャンプ時の通信中断処理
+                    if (currentAbortController) currentAbortController.abort();
+                    currentAbortController = new AbortController();
+
                     clearAudioCache();
                     stopAllAudioPlayers();
-                    triggerPrefetch(lines, currentSpeakerId);
+                    triggerPrefetch(lines, currentSpeakerId, currentSession);
                     continue;
                 }
 
                 activePlayerIndex = 1 - activePlayerIndex;
 
             } catch (err) {
-                console.error(`行 ${i + 1} の処理でエラー:`, err);
+                if (err.name !== 'AbortError') {
+                    console.error(`行 ${i + 1} の再生処理でエラー:`, err);
+                }
             }
-        } else {
-            triggerPrefetch(lines, currentSpeakerId);
         }
 
         currentLineIndex++;
+        triggerPrefetch(lines, currentSpeakerId, currentSession);
     }
 
-    // 古いセッションの遅延処理であれば、以降の後処理（isPlaying = false等）を実行せずに静かに終了する
+    // 全体の後処理
+    safeRevokeUrl(0);
+    safeRevokeUrl(1);
+
     if (currentSession !== playSessionId) {
         return;
     }
 
-    // 後処理
     stopAllAudioPlayers();
 
     if (!isStopped && !isLineJumped) {
-        // テキスト変更チェック & 保存ダイアログ表示
         const selectedIndex = parseInt(filePathDisplay?.value, 10);
         await saveFileContent(selectedIndex, textInput.value);
 
@@ -2217,13 +2253,10 @@ async function playLineByLine(fromStart = false) {
 
         if (playlist && nextIndex < playlist.length) {
             playingIndex = nextIndex;
+            await loadPlaylistItem(nextIndex);
             
-            // 確実にファイル読み込み完了を待機
-            await loadPlaylistItem(nextIndex); 
-            
-            // loadPlaylistItem 完了時にセッションが変わっていなければ次のトラックへ
             if (currentSession === playSessionId) {
-                return playLineByLine(true); 
+                return playLineByLine(true);
             } else {
                 return;
             }
@@ -2236,14 +2269,13 @@ async function playLineByLine(fromStart = false) {
         moveCursorToLineStart(0, true);
     }
 
-    // 全リスト再生完了時のみ状態リセット
     isPlaying = false;
     playingIndex = 0;
     const item = playlist[playingIndex];
-    filePathDisplay.value = playingIndex;
+    if (filePathDisplay && item) filePathDisplay.value = playingIndex;
 
     localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, playingIndex);
-    loadFileContent(item.path, item.content);
+    if (item) loadFileContent(item.path, item.content);
     renderPlaylistUI();
 
     updateButtonStates(false);
@@ -2586,15 +2618,17 @@ function showToast(message, type = 'info', displayTime = 6000) {
 
 // キャッシュおよびバッファ表示をクリアする
 function clearAudioCache() {
+    // 実行中の HTTP/IPC リクエストをすべて強制中断
+    cancelAllPendingFetches();
+
     audioCache.clear();
-    updateCacheCountUI(cacheLimitSlider.value); // UIのカウントを 0 に更新
+    updateCacheCountUI(cacheLimitSlider.value);
     if (textBufferProgressBar) {
         const fullText = textInput.value.replace(/\r\n/g, '\n');
         const lines = fullText.split('\n');
-        
-        // 移動先の行インデックスに基づいてバッファバーの位置を同期
-        const currentPercent = lines.length > 0 
-            ? Math.round((currentLineIndex / lines.length) * 100) 
+
+        const currentPercent = lines.length > 0
+            ? Math.round((currentLineIndex / lines.length) * 100)
             : 0;
 
         textBufferProgressBar.value = currentPercent;
@@ -2602,7 +2636,6 @@ function clearAudioCache() {
 }
 
 // キャッシュの保有状況に応じてバッファ用プログレスバーを表示更新する
-// @param {number} totalLines 全行数
 function updateBufferProgress(totalLines) {
     if (!textBufferProgressBar || totalLines === 0) return;
 
@@ -2616,38 +2649,34 @@ function updateBufferProgress(totalLines) {
     textBufferProgressBar.value = bufferPercent;
 }
 
-// バックグラウンドで常に PREFETCH_LINES 分のキャッシュが埋まるよう維持する非同期ループ
-// @param {Array<string>} lines 全行のテキスト配列
-// @param {string} speakerId 話者ID
-async function triggerPrefetch(lines, speakerId) {
-    if (isPrefetching || isStopped) return;
-    isPrefetching = true;
 
-    try {
-        for (let offset = 1; offset <= PREFETCH_LINES; offset++) {
-            const targetIndex = currentLineIndex + offset;
+// バックグラウンドで常に PREFETCH_LINES 分のキャッシュ（生成）を維持する Producer
+async function triggerPrefetch(lines, speakerId, sessionId) {
+    if (isStopped || sessionId !== playSessionId) return;
 
-            if (targetIndex >= lines.length || isStopped || isLineJumped) break;
+    const cacheLimit = localSettings[STORAGE_KEYS.CACHE_LIMIT] || PREFETCH_LINES;
+    for (let offset = 0; offset <= cacheLimit; offset++) {
+        const targetIndex = currentLineIndex + offset;
 
-            const textToFetch = lines[targetIndex].trim();
-            
-            if (textToFetch.length > 0 && !audioCache.has(targetIndex)) {
-                // 先読み前に上限チェックとあふれ分の削除を実行
-                pruneAudioCache(cacheLimitSlider.value - 1); // 1件追加予定のため余裕を作る
-                try {
-                    const data = await fetchAudioBuffer(textToFetch, speakerId);
-                    if (!isStopped && !isLineJumped) {
-                        audioCache.set(targetIndex, data);
-                        updateCacheCountUI(cacheLimitSlider.value); // UIのカウントをインクリメント更新
-                        updateBufferProgress(lines.length);
-                    }
-                } catch (err) {
-                    console.error(`先読みエラー (行 ${targetIndex + 1}):`, err);
-                }
+        if (targetIndex >= lines.length || isStopped || sessionId !== playSessionId || isLineJumped) break;
+
+        const textToFetch = lines[targetIndex].trim();
+
+        if (textToFetch.length > 0 && !audioCache.has(targetIndex)) {
+            // APIへの過剰アクセスを防ぐため上限並行数（例:2件）を制御
+            if (activeFetchCount >= MAX_CONCURRENT_FETCH) {
+                break;
             }
+
+            fetchAndCacheLine(targetIndex, textToFetch, speakerId, sessionId)
+                .then(() => {
+                    if (sessionId === playSessionId) {
+                        updateBufferProgress(lines.length);
+                        updateCacheCountUI(cacheLimitSlider.value);
+                    }
+                })
+                .catch(() => {});
         }
-    } finally {
-        isPrefetching = false;
     }
 }
 
@@ -2810,12 +2839,11 @@ function updateProgressUI(progressBar, current, max, unit = '') {
         progressCountEl.textContent = formatProgressText(current, max, unit);
     }
 }
-    
-// UI表示フォーマット関数 (` 10件` の形式)
+
+// UI表示フォーマット関数
 function updateCacheCountUI(limitValue, currentCount = audioCache.size) {
     if (!cacheCountDisplay) return;
 
-    // それぞれ 3桁のスペース埋めで桁揃え
     const paddedCurrent = String(currentCount).padStart(3, ' ');
     const paddedLimit = String(limitValue).padStart(3, ' ');
 
@@ -2823,49 +2851,35 @@ function updateCacheCountUI(limitValue, currentCount = audioCache.size) {
 }
 
 // 設定された上限数を超過したキャッシュを古い順に削除する
-// @param {number} limit 許容する最大キャッシュ保持件数
 function pruneAudioCache(limit) {
     if (audioCache.size <= limit) {
-        // 削除が発生しない場合でもUI表示を最新に更新
         updateCacheCountUI(cacheLimitSlider.value);
         return;
     }
 
-    // 削除対象外にする重要ライン（保護対象）
     const protectedIndices = new Set();
-    
-    // 現在再生中の行（再生処理中の場合）
     if (typeof currentLineIndex === 'number') {
         protectedIndices.add(currentLineIndex);
-        
-        // 直後の再生キュー行（次に再生予定の行）
         protectedIndices.add(currentLineIndex + 1);
     }
 
-    // キャッシュされているキー（行インデックス）を昇順（古い順）にソート
     const sortedKeys = Array.from(audioCache.keys()).sort((a, b) => a - b);
-
-    // 削除が必要な件数
     const excessCount = audioCache.size - limit;
     let deletedCount = 0;
 
     for (const key of sortedKeys) {
         if (deletedCount >= excessCount) break;
 
-        // 現在再生中および直後キューの行はスキップして破棄を回避
         if (protectedIndices.has(key)) {
             continue;
         }
 
-        // キャッシュ削除
         audioCache.delete(key);
         deletedCount++;
     }
 
-    // キャッシュ削除後に UI 表示を更新
     updateCacheCountUI(cacheLimitSlider.value);
 
-    // バッファバー等のプログレス表示を更新（利用可能な場合）
     if (typeof lines !== 'undefined') {
         updateBufferProgress(lines.length);
     }
@@ -2986,4 +3000,51 @@ function changePlaybackSpeed(direction) {
     applyPlaybackRate();
     // 選択値をトースト表示などでユーザーに通知（実装がある場合）
     showToast(`再生速度: ${speedSelect.value}x`);
+}
+
+// 進行中の通信をすべて安全に中断する
+function cancelAllPendingFetches() {
+    if (currentAbortController) {
+        currentAbortController.abort();
+    }
+    currentAbortController = new AbortController();
+}
+
+// 単一行の Fetch 実行と Promise キャッシュ登録
+function fetchAndCacheLine(index, text, speakerId, sessionId) {
+    if (audioCache.has(index)) {
+        return audioCache.get(index);
+    }
+
+    pruneAudioCache(cacheLimitSlider.value - 1);
+
+    const signal = (typeof currentAbortController !== 'undefined' && currentAbortController) 
+        ? currentAbortController.signal 
+        : null;
+
+    // FetchPromise を生成してそのまま Map に格納（状態を即時共有）
+    const fetchPromise = (async () => {
+        if (typeof activeFetchCount !== 'undefined') activeFetchCount++;
+        try {
+            const data = await fetchAudioBuffer(text, speakerId, { signal });
+            
+            // セッションが無効化されている場合は AbortError を投げて正常中断扱いにする
+            if (sessionId !== playSessionId) {
+                const abortError = new Error('Session invalidated');
+                abortError.name = 'AbortError';
+                throw abortError;
+            }
+            return data;
+        } catch (err) {
+            audioCache.delete(index);
+            throw err;
+        } finally {
+            if (typeof activeFetchCount !== 'undefined') activeFetchCount--;
+        }
+    })();
+
+    audioCache.set(index, fetchPromise);
+    updateCacheCountUI(cacheLimitSlider.value);
+
+    return fetchPromise;
 }
