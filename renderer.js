@@ -1,14 +1,15 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.56.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver1.58.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
 // --- localStorage保存・復元用キー定数 ---
 const STORAGE_KEYS = {
+    THEME: 'xVoice_theme',
     PLAYLIST: 'xVoice_playlist',
-    PLAYLIST_INDEX: 'playlist_index',
+    PLAYLIST_INDEX: 'xVoice_playlistIndex',
     TEXT: 'xVoice_text',
     TEXT_BACKUP: 'xVoice_textBackup',
     LINE_INDEX: 'xVoice_lineIndex',
@@ -17,7 +18,7 @@ const STORAGE_KEYS = {
     SPEAKER: 'xVoice_speaker',
     TEXT_DIRECTION: 'xVoice_textDirection',
     SERVER_ADDRESS: 'xVoice_serverAddress',
-    CACHE_LIMIT: 'app_cache_limit',
+    CACHE_LIMIT: 'xVoice_cacheLimit',
     BASE_VOLUME: 'xVoice_baseVolume',
     IS_MUTED: 'xVoice_isMuted'
 };
@@ -152,6 +153,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 進捗バー非表示
     showProgressBar('none');
+
     // アドレスの復元
     setupAddress();
     // 音量設定の復元
@@ -375,6 +377,7 @@ async function setupLocalStorageProtection() {
 async function setupAllLocalStorageSetting() {
     if (!isSecondary) {
         // --- 初回起動（Primary）---
+        localSettings[STORAGE_KEYS.THEME] = localStorage.getItem(STORAGE_KEYS.THEME) || 'dark';
         localSettings[STORAGE_KEYS.PLAYLIST] = localStorage.getItem(STORAGE_KEYS.PLAYLIST);
         localSettings[STORAGE_KEYS.PLAYLIST_INDEX] = localStorage.getItem(STORAGE_KEYS.PLAYLIST_INDEX) || '0';
         localSettings[STORAGE_KEYS.TEXT] = localStorage.getItem(STORAGE_KEYS.TEXT);
@@ -402,6 +405,7 @@ async function setupAllLocalStorageSetting() {
             return currentVal ?? defaultValue;
         };
 
+        localSettings[STORAGE_KEYS.THEME] = getVal(STORAGE_KEYS.THEME, localSettings[STORAGE_KEYS.THEME], 'dark');
         localSettings[STORAGE_KEYS.PLAYLIST] = getVal(STORAGE_KEYS.PLAYLIST, localSettings[STORAGE_KEYS.PLAYLIST], null);
         localSettings[STORAGE_KEYS.PLAYLIST_INDEX] = getVal(STORAGE_KEYS.PLAYLIST_INDEX, localSettings[STORAGE_KEYS.PLAYLIST_INDEX], '0');
         localSettings[STORAGE_KEYS.TEXT] = getVal(STORAGE_KEYS.TEXT, localSettings[STORAGE_KEYS.TEXT], null);
@@ -413,8 +417,8 @@ async function setupAllLocalStorageSetting() {
         localSettings[STORAGE_KEYS.TEXT_DIRECTION] = getVal(STORAGE_KEYS.TEXT_DIRECTION, localSettings[STORAGE_KEYS.TEXT_DIRECTION], 'horizontal-tb');
         localSettings[STORAGE_KEYS.SERVER_ADDRESS] = getVal(STORAGE_KEYS.SERVER_ADDRESS, localSettings[STORAGE_KEYS.SERVER_ADDRESS], DEFAULT_HOST);
         localSettings[STORAGE_KEYS.CACHE_LIMIT] = getVal(STORAGE_KEYS.CACHE_LIMIT, localSettings[STORAGE_KEYS.CACHE_LIMIT], PREFETCH_LINES.toString());
-        localSettings[STORAGE_KEYS.BASE_VOLUME] = getVal(STORAGE_KEYS.CACHE_LIMIT, localSettings[STORAGE_KEYS.BASE_VOLUME], '0,2');
-        localSettings[STORAGE_KEYS.IS_MUTED] = getVal(STORAGE_KEYS.CACHE_LIMIT, localSettings[STORAGE_KEYS.IS_MUTED], 'false');
+        localSettings[STORAGE_KEYS.BASE_VOLUME] = getVal(STORAGE_KEYS.BASE_VOLUME, localSettings[STORAGE_KEYS.BASE_VOLUME], '0,2');
+        localSettings[STORAGE_KEYS.IS_MUTED] = getVal(STORAGE_KEYS.IS_MUTED, localSettings[STORAGE_KEYS.IS_MUTED], 'false');
     }
 }
 
@@ -611,7 +615,7 @@ function setupTextDirection() {
 
 // テーマ設定の復元
 function setupTheme() {
-    setTheme(localStorage.getItem('theme') || 'dark');
+    setTheme(localSettings[STORAGE_KEYS.THEME]);
 }
 
 // Engine 初期化 (アプリ起動時)
@@ -1815,7 +1819,7 @@ function applyFontSize(size) {
 
 function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorageSetItemAndFile('theme', theme);
+    localStorageSetItemAndFile(STORAGE_KEYS.THEME, theme);
     if (btnTheme) btnTheme.textContent = theme === 'dark' ? '☀️' : '🌙';
 }
 
@@ -2776,7 +2780,7 @@ async function exportSettingsToFile(targetFilePath) {
             }
         }
 
-        const tempFilePath = `${targetFilePath}.tmp`;
+        const tempFilePath = `${targetFilePath}`;
         const data = JSON.stringify(settings, null, 2);
 
         // Preload経由の呼び出し前に値の存在を確認

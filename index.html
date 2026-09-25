@@ -1,7 +1,7 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.54.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver1.58.0';
  --------------------------------------------------------------------- -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -40,6 +40,10 @@
                     <select id="speaker"><option value="">エンジン起動確認中...</option></select>
                     <button id="btn-connect" class="file-select-btn" type="button" title="AivisSpeech Engine接続 (Ctrl+n)">🔄</button>
                     <input type="text" id="input-address" placeholder="http://127.0.0.1:10101" title="サーバーアドレス">
+                    <!-- キャッシュ表示群 -->
+                    <button type="button" id="cache-btn" class="cache-btn" title="キャッシュ量変更（Ctrl+↑↓）">👁️</button>
+                    <span id="cache-count-display" class="cache-count-display">  0/  0件</span>
+                    <input type="range" id="cache-limit-slider" min="1" max="100" value="10" class="cache-limit-slider">
                 </div>
             </div>
 
@@ -116,10 +120,6 @@
                     </div>
                     <progress id="mp3-progress" value="0" max="100" class="mp3-progress" hidden></progress>
                     <progress id="playlist-progress" value="0" max="100" class="playlist-progress" hidden></progress>
-                    <!-- キャッシュ表示群 -->
-                    <button type="button" id="cache-btn" class="cache-btn" title="キャッシュ量変更（Ctrl+↑↓）">👁️</button>
-                    <span id="cache-count-display" class="cache-count-display">  0/  0件</span>
-                    <input type="range" id="cache-limit-slider" min="1" max="100" value="10" class="cache-limit-slider">
                 </div>
             </div>
             <div class="status-display" id="status-display">AivisSpeech Engineに接続中...</div>
