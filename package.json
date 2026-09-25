@@ -79,6 +79,14 @@
         "ja_JP"
       ]
     },
+    "protocols": [
+      {
+        "name": "xvoice",
+        "schemes": [
+          "xvoice"
+        ]
+      }
+    ],
     "fileAssociations": [
       {
         "ext": "txt",
@@ -87,14 +95,14 @@
         "mimeType": "text/plain",
         "icon": "xVoice.ico",
         "role": "Viewer"
-      }
-    ],
-    "protocols": [
+      },
       {
-        "name": "xvoice",
-        "schemes": [
-          "xvoice"
-        ]
+        "ext": "xvj",
+        "name": "xVoice Project File",
+        "description": "xVoice 設定ファイル",
+        "mimeType": "application/x-xplayer-project",
+        "icon": "xVoice.ico",
+        "role": "Editor"
       }
     ]
   }
