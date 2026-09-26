@@ -1993,19 +1993,22 @@ async function loadSpeakers() {
 }
 
 // 音声生成ロジック (動的アドレス対応)
-async function fetchAudioBuffer(text, speakerId) {
+async function fetchAudioBuffer(text, speakerId, options = {}) {
     const baseUrl = getServerAddress();
     const processedText = text.replace(/[｛{][^｜|]+[｜|]([^｝}]+)[｝}]/g, '$1');
 
+    // signal を fetch オプションに設定
     const queryRes = await fetch(`${baseUrl}/audio_query?text=${encodeURIComponent(processedText)}&speaker=${speakerId}`, {
-        method: 'POST'
+        method: 'POST',
+        signal: options.signal
     });
     const audioQuery = await queryRes.json();
 
     const synthRes = await fetch(`${baseUrl}/synthesis?speaker=${speakerId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(audioQuery)
+        body: JSON.stringify(audioQuery),
+        signal: options.signal
     });
 
     return await synthRes.arrayBuffer();
