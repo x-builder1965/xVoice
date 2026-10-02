@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver2.00.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver2.01.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -182,6 +182,7 @@ body {
 }
 
 #text-input {
+    position: relative;
     width: 100%;
     height: 100%;
     min-height: 0;
@@ -218,6 +219,27 @@ body {
     padding: 8px;
 }
 
+#text-input .cm-gutters {
+    background: transparent;
+    border-right: 1px solid var(--border-color);
+}
+
+#text-input .cm-speaker-gutter {
+    min-width: 2.4em;
+}
+
+#text-input .cm-speaker-gutter .cm-gutterElement {
+    width: 2.4em;
+    padding: 0;
+    text-align: center;
+}
+
+#text-input .cm-speaker-marker {
+    display: inline-block;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+    line-height: 1;
+}
+
 #text-input .cm-editor.cm-playback-mode .cm-playback-highlight {
     background-color: var(--highlight-color);
     color: var(--primary-text);
@@ -245,6 +267,36 @@ body {
     display: block;
 }
 
+#text-input.is-vertical > .cm-vertical-input {
+    padding-inline-start: 2.4em;
+}
+
+#text-input > .cm-vertical-gutter {
+    display: none;
+    position: absolute;
+    inset: 8px;
+    z-index: 2;
+    overflow: hidden;
+    pointer-events: none;
+    writing-mode: vertical-rl;
+}
+
+#text-input > .cm-vertical-gutter[hidden] {
+    display: none;
+}
+
+#text-input.is-vertical > .cm-vertical-gutter {
+    display: block;
+}
+
+.cm-vertical-speaker-marker {
+    position: absolute;
+    top: 0;
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+    line-height: 1;
+    transform: translateX(50%);
+}
+
 #text-input > .cm-vertical-input::selection {
     background-color: var(--highlight-color);
     color: var(--primary-text);
@@ -267,6 +319,51 @@ body {
 
 #text-input:focus-within {
     border-color: var(--primary-color);
+}
+
+.speaker-context-menu {
+    position: fixed;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    max-width: min(320px, calc(100vw - 16px));
+    max-height: min(60vh, 420px);
+    overflow: auto;
+    padding: 4px;
+    background: var(--card-bg);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.speaker-context-menu[hidden] {
+    display: none;
+}
+
+.speaker-context-menu-title {
+    padding: 6px 10px;
+    color: var(--status-color);
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.speaker-context-menu-item {
+    width: 100%;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-color);
+    font: inherit;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.speaker-context-menu-item:hover {
+    background: var(--secondary-hover);
 }
 
 label {

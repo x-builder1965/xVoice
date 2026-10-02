@@ -1,10 +1,16 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.00.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.01.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
+const SPEAKER_ICONS = Array.from(
+    new Intl.Segmenter('ja', { granularity: 'grapheme' }).segment(
+        '😀😃😄😁😆😅🤣😂🙂🙃🫠😉😊😇🥰😍🤩😘😗☺️😚😙🥲😋😛😜🤪😝🤑🤗🤭🫢🫣🤫🤔🫡🤐🤨😐😑😶🫥😏😒🙄😬😮‍💨🤥🫨🙂‍↔️🙂‍↕️😌😔😪🤤😴🫩😷🤒🤕🤢🤮🤧🥶😵🤯🤠🥸😎🤓🧐😕🫤😟🙁☹️😮😯😲😳🥺🥹😦😧😨😰😥😢😭😱😖😣😞😓😩😫🥱😤😡😠🤬'
+    ),
+    ({ segment }) => segment
+);
 // --- localStorage保存・復元用キー定数 ---
 const STORAGE_KEYS = {
     THEME: 'xVoice_theme',
@@ -60,6 +66,7 @@ const settingsFilePath = getUserSettingsPath(); // 設定ファイルパス取�
 let mainContainer = null;        // メインコンテンツ要素（全体のレイアウト領域）
 let btnTheme = null;             // テーマ切り替えボタン（ダーク/ライトモード）
 let speakerSelect = null;        // 話者（ボイス/キャラクター）選択ドロップダウン
+let speakerOptionsByIcon = [];   // 行頭アイコンから話者IDを引くための一覧
 let btnConnect = null;           // 音声合成エンジン接続ボタン
 let inputAddress = null;         // エンジンサーバーアドレス入力欄
 let engineProgress = null;       // エンジン起動・接続処理の進捗表示領域
@@ -302,7 +309,14 @@ async function setupAllDomSettings() {
     btnFileSelect = document.getElementById('btn-file-select');
     filePathDisplay = document.getElementById('file-path-display');
     const textInputContainer = document.getElementById('text-input');
-    textInput = CodeMirrorBundle.createEditor(textInputContainer, textInputContainer.dataset.placeholder);
+    textInput = CodeMirrorBundle.createEditor(
+        textInputContainer,
+        textInputContainer.dataset.placeholder,
+        speakerToken => {
+            const option = getSpeakerOption(speakerToken);
+            return option && option.value !== speakerSelect?.value ? option.dataset.icon || '' : '';
+        }
+    );
     fontSizeSelect = document.getElementById('font-size-select');
     btnFileClear = document.getElementById('btn-file-clear');
     btnRuby = document.getElementById('btn-ruby');
@@ -551,16 +565,17 @@ function setupFilePathAndTextArgs(launchData) {
     }
 
     if (textInput) {
-        const normalizedContent = (launchData.content || '').replace(/\r\n/g, '\n');
-        textInput.value = normalizedContent;
-        previousText = normalizedContent;
-        textBackup = normalizedContent;
+        const parsedContent = parseStoredText(launchData.content || '');
+        textInput.value = parsedContent.text;
+        textInput.setLineSpeakers(parsedContent.speakers);
+        previousText = parsedContent.text;
+        textBackup = parsedContent.text;
         if (btnSave) btnSave.classList.remove('change-active');
     }
 
     currentLineIndex = 0;
 
-    localStorageSetItemAndFile(STORAGE_KEYS.TEXT, launchData.content || '');
+    localStorageSetItemAndFile(STORAGE_KEYS.TEXT, textInput?.value || '');
     localStorageSetItemAndFile(STORAGE_KEYS.LINE_INDEX, '0');
 }
 
@@ -596,9 +611,10 @@ function setupFilePathAndText() {
 
     // 5. テキストエリアの復元
     if (localSettings[STORAGE_KEYS.TEXT] !== null && textInput) {
-        const normalizedlocalSettings = localSettings[STORAGE_KEYS.TEXT].replace(/\r\n/g, '\n');
-        textInput.value = normalizedlocalSettings;
-        previousText = normalizedlocalSettings;
+        const parsedText = parseStoredText(localSettings[STORAGE_KEYS.TEXT]);
+        textInput.value = parsedText.text;
+        textInput.setLineSpeakers(parsedText.speakers);
+        previousText = parsedText.text;
     }
 
     // 6. カーソル行インデックスの復元
@@ -607,7 +623,7 @@ function setupFilePathAndText() {
     }
 
     // 7. バックアップテキストの比較・変更フラグ更新
-    textBackup = localSettings[STORAGE_KEYS.TEXT_BACKUP] || '';
+    textBackup = parseStoredText(localSettings[STORAGE_KEYS.TEXT_BACKUP] || '').text;
     if (textBackup !== (textInput ? textInput.value : '')) {
         if (btnSave) btnSave.classList.add('change-active');
     }
@@ -974,6 +990,7 @@ function registerSpeakerSelectChange() {
     speakerSelect?.addEventListener('change', (e) => {
         clearAudioCache();
         localStorageSetItemAndFile(STORAGE_KEYS.SPEAKER, e.target.value);
+        if (textInput) textInput.setLineSpeakers(textInput.getLineSpeakers());
     });
 }
 
@@ -1021,6 +1038,58 @@ async function registerFilePathDisplayChange() {
     });
 }
 
+function getSpeakerOption(speakerToken) {
+    if (!speakerToken) return null;
+    return Array.from(speakerSelect?.options || []).find(option =>
+        option.value === String(speakerToken)
+        || option.dataset.persistName === String(speakerToken)
+        || option.dataset.icon === String(speakerToken)
+    ) || null;
+}
+
+function getLineSpeakerId(lineIndex, fallbackSpeakerId) {
+    const speakerToken = textInput?.getLineSpeaker(lineIndex);
+    return getSpeakerOption(speakerToken)?.value || fallbackSpeakerId;
+}
+
+function getSpeechText(line) {
+    return line.trim();
+}
+
+function parseStoredText(value) {
+    const lines = String(value ?? '').replace(/\r\n/g, '\n').split('\n');
+    const hasSpeakerMetadata = lines.every(line => /^(?:[^|]+)?\|\|/.test(line));
+    if (!hasSpeakerMetadata) {
+        return { text: lines.join('\n'), speakers: lines.map(() => null) };
+    }
+
+    const speakers = [];
+    const textLines = lines.map(line => {
+        const separatorIndex = line.indexOf('||');
+        const token = line.slice(0, separatorIndex);
+        speakers.push(token || null);
+        return line.slice(separatorIndex + 2);
+    });
+    return { text: textLines.join('\n'), speakers };
+}
+
+function serializeTextWithSpeakers(value) {
+    const lines = String(value ?? '').replace(/\r\n/g, '\n').split('\n');
+    const speakers = textInput?.getLineSpeakers() || [];
+    return lines.map((line, index) => {
+        const token = speakers[index];
+        const option = getSpeakerOption(token);
+        const speakerName = option?.dataset.persistName || token || '';
+        return `${speakerName}||${line}`;
+    }).join('\n');
+}
+
+function setLineSpeaker(lineIndex, speakerId) {
+    const option = getSpeakerOption(speakerId);
+    textInput.setLineSpeaker(lineIndex, option?.dataset.persistName || null);
+    textInput.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 // テキストのカーソル位置の変更イベント
 function registerTextInputClick() {
     textInput?.addEventListener('click', (e) => { 
@@ -1031,6 +1100,55 @@ function registerTextInputClick() {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
             handleCursorChange();
         }
+    });
+
+    const speakerMenu = document.createElement('div');
+    speakerMenu.className = 'speaker-context-menu';
+    speakerMenu.setAttribute('role', 'menu');
+    speakerMenu.hidden = true;
+    document.body.appendChild(speakerMenu);
+
+    const hideSpeakerMenu = () => { speakerMenu.hidden = true; };
+    speakerMenu.addEventListener('click', event => event.stopPropagation());
+    document.addEventListener('click', event => {
+        if (!speakerMenu.contains(event.target)) hideSpeakerMenu();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') hideSpeakerMenu();
+    });
+
+    textInput?.addEventListener('contextmenu', event => {
+        event.preventDefault();
+        const position = textInput.getPositionAtCoords(event.clientX, event.clientY);
+        const lineIndex = textInput.value.slice(0, position).split('\n').length - 1;
+        speakerMenu.replaceChildren();
+
+        const title = document.createElement('div');
+        title.className = 'speaker-context-menu-title';
+        title.textContent = `${lineIndex + 1}行目の話者`;
+        speakerMenu.appendChild(title);
+
+        const addSpeakerButton = (label, speakerId) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'speaker-context-menu-item';
+            button.textContent = label;
+            button.setAttribute('role', 'menuitem');
+            button.addEventListener('click', () => {
+                setLineSpeaker(lineIndex, speakerId);
+                hideSpeakerMenu();
+            });
+            speakerMenu.appendChild(button);
+        };
+
+        Array.from(speakerSelect.options).forEach(option => {
+            if (option.value) addSpeakerButton(option.textContent, option.value);
+        });
+        addSpeakerButton('　話者の割当を解除', '');
+
+        speakerMenu.hidden = false;
+        speakerMenu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - speakerMenu.offsetWidth - 8))}px`;
+        speakerMenu.style.top = `${Math.max(8, Math.min(event.clientY, window.innerHeight - speakerMenu.offsetHeight - 8))}px`;
     });
 }
 
@@ -1088,7 +1206,10 @@ function registerBtnFileClearClick() {
             filePathDisplay.value = '';
         }
 
-        if (textInput) textInput.value = '';
+        if (textInput) {
+            textInput.value = '';
+            textInput.setLineSpeakers([]);
+        }
         if (btnGenerate) btnGenerate.disabled = true;
 
         currentLineIndex = 0;
@@ -1469,6 +1590,7 @@ function registerBtnSpeakClick() {
 
     // 右クリック時
     document.addEventListener('contextmenu', (e) => {
+        if (e.target?.closest?.('#text-input, .speaker-context-menu')) return;
         e.preventDefault(); // デフォルトの右クリックメニュー（コンテキストメニュー）を抑制
         btnSpeak.click();
     });
@@ -1793,6 +1915,7 @@ function applyFontSize(size) {
     const end = textInput.selectionEnd;
 
     textInput.style.fontSize = size;
+    textInput.requestMeasure();
     if (filePathDisplay) filePathDisplay.style.fontSize = size;
     if (fontSizeSelect) fontSizeSelect.value = size;
     localStorageSetItemAndFile(STORAGE_KEYS.FONT_SIZE, size);
@@ -1850,7 +1973,8 @@ async function saveFileContent(selectedIndex, currentText, compulsion = false) {
     const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
     if (typeof textBackup !== 'undefined' && (currentText !== textBackup || compulsion)) {
         try {
-            const result = await window.api.saveTextFile(currentText, currentPath);
+            const serializedText = serializeTextWithSpeakers(currentText);
+            const result = await window.api.saveTextFile(serializedText, currentPath);
             if (result.success) {
                 console.log('保存完了:', result.filePath);
                 textBackup = currentText;
@@ -1858,7 +1982,7 @@ async function saveFileContent(selectedIndex, currentText, compulsion = false) {
                 // プレイリスト内の内容・パスを同期更新
                 if (currentItem) {
                     currentItem.path = result.filePath;
-                    currentItem.content = currentText;
+                    currentItem.content = serializedText;
                     /*
                     renderPlaylistUI();
                     filePathDisplay.value = selectedIndex;
@@ -1877,9 +2001,11 @@ async function saveFileContent(selectedIndex, currentText, compulsion = false) {
 
 // テキストパス・テキスト反映
 async function loadFileContent(path, content) {
-    const loadedText = (content || '').replace(/\r\n/g, '\n');
+    const parsedContent = parseStoredText(content || '');
+    const loadedText = parsedContent.text;
 
     if (textInput) textInput.value = loadedText;
+    if (textInput) textInput.setLineSpeakers(parsedContent.speakers);
     previousText = loadedText;
     textBackup = loadedText;
     if (btnSave) btnSave.classList.remove('change-active');
@@ -1964,14 +2090,22 @@ async function loadSpeakers() {
 
         if (speakerSelect) {
             speakerSelect.innerHTML = '';
+            let speakerIconIndex = 0;
             speakers.forEach(sp => {
                 sp.styles.forEach(style => {
                     const opt = document.createElement('option');
                     opt.value = style.id;
-                    opt.textContent = `${sp.name} (${style.name})`;
+                    const speakerIcon = SPEAKER_ICONS[speakerIconIndex] || '';
+                    speakerIconIndex += 1;
+                    opt.dataset.icon = speakerIcon;
+                    opt.dataset.persistName = `${sp.name} (${style.name})`;
+                    opt.textContent = `${speakerIcon ? `${speakerIcon} ` : ''}${opt.dataset.persistName}`;
                     speakerSelect.appendChild(opt);
                 });
             });
+            speakerOptionsByIcon = Array.from(speakerSelect.options)
+                .filter(option => option.dataset.icon)
+                .sort((a, b) => b.dataset.icon.length - a.dataset.icon.length);
 
             if (localSettings[STORAGE_KEYS.SPEAKER]) {
                 const exists = Array.from(speakerSelect.options).some(opt => opt.value === String(localSettings[STORAGE_KEYS.SPEAKER]));
@@ -1979,6 +2113,8 @@ async function loadSpeakers() {
                     speakerSelect.value = localSettings[STORAGE_KEYS.SPEAKER];
                 }
             }
+            if (textInput) textInput.setLineSpeakers(textInput.getLineSpeakers());
+
         }
 
         showToast('話者モデル取得完了');
@@ -2108,7 +2244,8 @@ async function playLineByLine(fromStart = false) {
         updateProgressUI(textProgressBar, currentDisplayLine, lines.length, '行');
 
         const lineText = lines[i];
-        const lineTrimmed = lineText.trim();
+        const lineTrimmed = getSpeechText(lineText);
+        const lineSpeakerId = getLineSpeakerId(i, currentSpeakerId);
 
         if (lineTrimmed.length > 0) {
             if (statusDisplay) statusDisplay.textContent = `再生中 (${i + 1}/${lines.length} 行目 - ${progressPercent}%)`;
@@ -2126,7 +2263,7 @@ async function playLineByLine(fromStart = false) {
                     if (audioCache.has(i)) {
                         audioData = await audioCache.get(i);
                     } else {
-                        audioData = await fetchAndCacheLine(i, lineTrimmed, currentSpeakerId, currentSession);
+                        audioData = await fetchAndCacheLine(i, lineTrimmed, lineSpeakerId, currentSession);
                     }
                 } finally {
                     showLoading(false);
@@ -2304,13 +2441,15 @@ async function generateFullTextMp3() {
     // 空行を除外した生成対象データ（テキストと元の行番号のペアを保持）
     const targets = [];
     allLines.forEach((lineText, originalLineIndex) => {
-        const trimmed = lineText.trim();
+        const trimmed = getSpeechText(lineText);
         if (trimmed.length > 0) {
-            targets.push({ text: trimmed, originalLineIndex });
+            targets.push({
+                text: trimmed,
+                originalLineIndex,
+                speakerId: getLineSpeakerId(originalLineIndex, speakerSelect.value)
+            });
         }
     });
-
-    const speakerId = speakerSelect.value;
 
     if (targets.length === 0) return showToast('テキストを入力してください。', 'warning');
 
@@ -2351,7 +2490,7 @@ async function generateFullTextMp3() {
                 return;
             }
 
-            const { text, originalLineIndex } = targets[i];
+            const { text, originalLineIndex, speakerId } = targets[i];
 
             // 生成対象行をスクロール＆ハイライト表示 (第2引数を true に指定)
             moveCursorToLineStart(originalLineIndex, true);
@@ -2686,7 +2825,8 @@ async function triggerPrefetch(lines, speakerId, sessionId) {
 
         if (targetIndex >= lines.length || isStopped || sessionId !== playSessionId || isLineJumped) break;
 
-        const textToFetch = lines[targetIndex].trim();
+        const textToFetch = getSpeechText(lines[targetIndex]);
+        const lineSpeakerId = getLineSpeakerId(targetIndex, speakerId);
 
         if (textToFetch.length > 0 && !audioCache.has(targetIndex)) {
             // APIへの過剰アクセスを防ぐため上限並行数（例:2件）を制御
@@ -2694,7 +2834,7 @@ async function triggerPrefetch(lines, speakerId, sessionId) {
                 break;
             }
 
-            fetchAndCacheLine(targetIndex, textToFetch, speakerId, sessionId)
+            fetchAndCacheLine(targetIndex, textToFetch, lineSpeakerId, sessionId)
                 .then(() => {
                     if (sessionId === playSessionId) {
                         // キャッシュ量表示、キャッシュ状況バー表示の更新
@@ -2770,8 +2910,12 @@ function getUserSettingsPath() {
 
 // 個別設定の変更時呼び出し用関数
 async function localStorageSetItemAndFile(key, value) {
+    const persistedValue = key === STORAGE_KEYS.TEXT
+        ? serializeTextWithSpeakers(value)
+        : value;
+
     // 1. メモリ保持
-    localSettings[key] = value;
+    localSettings[key] = persistedValue;
 
     // 2. 多重起動時はファイル・localStorageに書き込まない（要件遵守）
     if (isSecondary) {
@@ -2779,10 +2923,10 @@ async function localStorageSetItemAndFile(key, value) {
     }
 
     // 3. 初回起動時のみ localStorage およびファイルへ保存
-    if (value === null || value === undefined) {
+    if (persistedValue === null || persistedValue === undefined) {
         localStorage.removeItem(key);
     } else {
-        const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        const stringValue = typeof persistedValue === 'object' ? JSON.stringify(persistedValue) : String(persistedValue);
         localStorage.setItem(key, stringValue);
     }
 
