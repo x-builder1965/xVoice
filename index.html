@@ -1,7 +1,7 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver1.61.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver2.00.0';
  --------------------------------------------------------------------- -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -10,6 +10,7 @@
     <title>xVoice - AivisSpeech Client</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <link rel="stylesheet" href="style.css">
+    <script src="codemirror.bundle.js" defer></script>
     <script src="renderer.js" defer></script>
 </head>
 <body>
@@ -78,7 +79,7 @@
 
             <!-- テキスト入力エリア -->
             <div class="field field-text">
-                <textarea id="text-input" placeholder="テキストを入力するか、ファイルを読み込んでください..."></textarea>
+                <div id="text-input" data-placeholder="テキストを入力するか、ファイルを読み込んでください..."></div>
             </div>
 
             <!-- ステータス・プログレスバー部分 -->

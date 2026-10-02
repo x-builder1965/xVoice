@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.62.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.00.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -66,7 +66,7 @@ let engineProgress = null;       // エンジン起動・接続処理の進捗�
 let btnFolderSelect = null;      // フォルダ選択ボタン
 let btnFileSelect = null;        // テキストファイル選択ボタン
 let filePathDisplay = null;      // 開いているファイルのパス表示エリア
-let textInput = null;            // 本文テキスト入力・編集エリア（textarea）
+let textInput = null;            // 本文テキスト入力・編集エリア（CodeMirror互換アダプター）
 let fontSizeSelect = null;       // テキストフォントサイズ変更ドロップダウン
 let btnFileClear = null;         // 読み込み済みファイル解除（クリア）ボタン
 let btnRuby = null;              // ルビ（読み編集 ｛漢字｜よみ｝）挿入ボタン
@@ -301,7 +301,8 @@ async function setupAllDomSettings() {
     btnFolderSelect = document.getElementById('btn-folder-select');
     btnFileSelect = document.getElementById('btn-file-select');
     filePathDisplay = document.getElementById('file-path-display');
-    textInput = document.getElementById('text-input');
+    const textInputContainer = document.getElementById('text-input');
+    textInput = CodeMirrorBundle.createEditor(textInputContainer, textInputContainer.dataset.placeholder);
     fontSizeSelect = document.getElementById('font-size-select');
     btnFileClear = document.getElementById('btn-file-clear');
     btnRuby = document.getElementById('btn-ruby');
@@ -693,7 +694,7 @@ function registerDocumentKeydown() {
         // textInput（あるいは入力エリア全般）のフォーカス判定
         const activeEl = document.activeElement;
         const isEditing = activeEl && (
-            activeEl.id === 'textInput' || 
+            activeEl.closest?.('#text-input') ||
             activeEl.tagName === 'INPUT' || 
             activeEl.tagName === 'TEXTAREA' || 
             activeEl.isContentEditable
@@ -1210,7 +1211,7 @@ function registerBtnRubyClick() {
         const rubyFormatted = `｛${selectedText}｜｝`;
     
         textInput.focus();
-        document.execCommand('insertText', false, rubyFormatted);
+        textInput.replaceSelection(rubyFormatted);
     
         // 「｜」と「｝」の間の位置を計算してカーソルを移動
         const targetCursorPos = start + 1 + selectedText.length + 1;
@@ -1772,12 +1773,12 @@ function getServerAddress() {
 function applyTextDirection(direction) {
     if (!textInput) return;
 
-    textInput.style.writingMode = direction;
     if (writingModeSelect) writingModeSelect.value = direction;
     localStorageSetItemAndFile(STORAGE_KEYS.TEXT_DIRECTION, direction);
 
     if (textInput) {
         textInput.classList.toggle('is-vertical', direction === 'vertical-rl');
+        textInput.requestMeasure();
     }
 }
 
@@ -1785,7 +1786,7 @@ function applyTextDirection(direction) {
 function applyFontSize(size) {
     if (!textInput) return;
 
-    const oldLineHeight = parseFloat(window.getComputedStyle(textInput).lineHeight) || 20;
+    const oldLineHeight = parseFloat(window.getComputedStyle(textInput.dom).lineHeight) || 20;
     const oldScrollTop = textInput.scrollTop;
 
     const start = textInput.selectionStart;
@@ -1796,7 +1797,7 @@ function applyFontSize(size) {
     if (fontSizeSelect) fontSizeSelect.value = size;
     localStorageSetItemAndFile(STORAGE_KEYS.FONT_SIZE, size);
 
-    const newLineHeight = parseFloat(window.getComputedStyle(textInput).lineHeight) || 20;
+    const newLineHeight = parseFloat(window.getComputedStyle(textInput.dom).lineHeight) || 20;
     if (oldLineHeight > 0) {
         const ratio = newLineHeight / oldLineHeight;
         textInput.scrollTop = oldScrollTop * ratio;
@@ -2454,8 +2455,11 @@ function moveCursorToLineStart(lineIndex, highlight = isPlaying) {
 }
 
 function scrollTextareaToCharOffset(textarea, charIndex) {
-    const style = window.getComputedStyle(textarea);
-    const isVertical = style.writingMode.startsWith('vertical');
+    const editorElement = textarea.dom || textarea;
+    const scrollElement = editorElement.querySelector?.('.cm-scroller') || editorElement;
+    const contentElement = textarea.dom?.querySelector('.cm-content') || editorElement;
+    const style = window.getComputedStyle(contentElement);
+    const isVertical = textarea.classList?.contains('is-vertical') || style.writingMode.startsWith('vertical');
     const mirror = document.createElement('div');
     
     const stylesToCopy = [
@@ -2468,11 +2472,11 @@ function scrollTextareaToCharOffset(textarea, charIndex) {
     if (isVertical) {
         mirror.style.writingMode = 'vertical-rl';
         mirror.style.webkitWritingMode = 'vertical-rl';
-        mirror.style.height = `${textarea.clientHeight}px`;
+        mirror.style.height = `${scrollElement.clientHeight}px`;
         mirror.style.width = 'auto';
     } else {
         mirror.style.writingMode = 'horizontal-tb';
-        mirror.style.width = `${textarea.clientWidth}px`;
+        mirror.style.width = `${scrollElement.clientWidth}px`;
         mirror.style.height = 'auto';
     }
 
@@ -2498,8 +2502,8 @@ function scrollTextareaToCharOffset(textarea, charIndex) {
         document.body.removeChild(mirror);
 
         const charCenterFromRight = mirrorWidth - (spanLeft + (spanWidth / 2));
-        const clientWidth = textarea.clientWidth;
-        const scrollWidth = textarea.scrollWidth;
+        const clientWidth = scrollElement.clientWidth;
+        const scrollWidth = scrollElement.scrollWidth;
         const targetOffsetFromRight = charCenterFromRight - (clientWidth / 2);
 
         let targetScrollLeft = -targetOffsetFromRight;
@@ -2507,15 +2511,15 @@ function scrollTextareaToCharOffset(textarea, charIndex) {
         const maxNegativeScroll = -(scrollWidth - clientWidth);
         if (targetScrollLeft < maxNegativeScroll) targetScrollLeft = maxNegativeScroll;
 
-        textarea.scrollLeft = targetScrollLeft;
+        scrollElement.scrollLeft = targetScrollLeft;
     } else {
         const spanTop = span.offsetTop;
         const spanHeight = span.offsetHeight || parseFloat(style.fontSize);
         document.body.removeChild(mirror);
 
-        const clientHeight = textarea.clientHeight;
+        const clientHeight = scrollElement.clientHeight;
         const targetTop = spanTop - (clientHeight / 2) + (spanHeight / 2);
-        textarea.scrollTop = Math.max(0, targetTop);
+        scrollElement.scrollTop = Math.max(0, targetTop);
     }
 }
 
