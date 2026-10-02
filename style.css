@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver2.01.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver2.02.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -601,7 +601,8 @@ input[type="file"] {
 #text-input::-webkit-scrollbar,
 #text-input .cm-scroller::-webkit-scrollbar,
 #text-input > .cm-vertical-input::-webkit-scrollbar,
-#speaker::-webkit-scrollbar {
+#speaker::-webkit-scrollbar,
+.speaker-context-menu::-webkit-scrollbar {
     width: 12px;
     height: 12px;
     cursor: default; /* スクロールバー全体の基本カーソルをデフォルト（矢印）に設定 */
@@ -610,7 +611,8 @@ input[type="file"] {
 #text-input::-webkit-scrollbar-track,
 #text-input .cm-scroller::-webkit-scrollbar-track,
 #text-input > .cm-vertical-input::-webkit-scrollbar-track,
-#speaker::-webkit-scrollbar-track {
+#speaker::-webkit-scrollbar-track,
+.speaker-context-menu::-webkit-scrollbar-track {
     background: var(--scrollbar-track);
     border-radius: 4px;
 }
@@ -618,7 +620,8 @@ input[type="file"] {
 #text-input::-webkit-scrollbar-thumb,
 #text-input .cm-scroller::-webkit-scrollbar-thumb,
 #text-input > .cm-vertical-input::-webkit-scrollbar-thumb,
-#speaker::-webkit-scrollbar-thumb {
+#speaker::-webkit-scrollbar-thumb,
+.speaker-context-menu::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
     border-radius: 4px;
     border: 2px solid var(--scrollbar-track);
@@ -628,7 +631,8 @@ input[type="file"] {
 #text-input::-webkit-scrollbar-thumb:hover,
 #text-input .cm-scroller::-webkit-scrollbar-thumb:hover,
 #text-input > .cm-vertical-input::-webkit-scrollbar-thumb:hover,
-#speaker::-webkit-scrollbar-thumb:hover {
+#speaker::-webkit-scrollbar-thumb:hover,
+.speaker-context-menu::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-thumb-hover);
 }
 

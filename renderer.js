@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.01.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.02.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -1086,7 +1086,10 @@ function serializeTextWithSpeakers(value) {
 
 function setLineSpeaker(lineIndex, speakerId) {
     const option = getSpeakerOption(speakerId);
-    textInput.setLineSpeaker(lineIndex, option?.dataset.persistName || null);
+    const speakerToken = option?.value !== speakerSelect?.value
+        ? option?.dataset.persistName || null
+        : null;
+    textInput.setLineSpeaker(lineIndex, speakerToken);
     textInput.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
@@ -1144,7 +1147,7 @@ function registerTextInputClick() {
         Array.from(speakerSelect.options).forEach(option => {
             if (option.value) addSpeakerButton(option.textContent, option.value);
         });
-        addSpeakerButton('　話者の割当を解除', '');
+        addSpeakerButton('❌話者の割当を解除', '');
 
         speakerMenu.hidden = false;
         speakerMenu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - speakerMenu.offsetWidth - 8))}px`;
