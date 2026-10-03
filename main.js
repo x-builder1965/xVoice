@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver1.54.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.04.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -52,6 +52,8 @@ registerIpcMainInitEngine();
 registerIpcMainConnectEngine();
 // 手動切断ハンドラー
 registerIpcMainDisconnectEngine();
+// 話者モデル追加・削除ハンドラー
+registerIpcMainAivmModels();
 // Engine再起動処理ハンドラー
 registerIpcMainRestartEngine();
 // 音声保存処理ハンドラー
@@ -179,6 +181,68 @@ function registerIpcMainDisconnectEngine() {
             await stopAivisEngine();
         }
         return { success: true };
+    });
+}
+
+function registerIpcMainAivmModels() {
+    ipcMain.handle('install-aivm-model', async (event, address = DEFAULT_AIVIS_HOST) => {
+        const result = await dialog.showOpenDialog({
+            title: '話者モデルの選択',
+            properties: ['openFile'],
+            filters: [
+                { name: 'AIVMモデル (*.aivmx, *.aivm)', extensions: ['aivmx', 'aivm'] },
+                { name: 'すべてのファイル', extensions: ['*'] }
+            ]
+        });
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return { canceled: true };
+        }
+
+        const filePath = result.filePaths[0];
+        const extension = path.extname(filePath).toLowerCase();
+        if (!['.aivmx', '.aivm'].includes(extension)) {
+            return { success: false, error: 'AIVMXまたはAIVMファイルを選択してください。' };
+        }
+
+        try {
+            const file = await fs.readFile(filePath);
+            const form = new FormData();
+            form.append('file', new Blob([file]), path.basename(filePath));
+            const response = await fetch(`${address.replace(/\/$/, '')}/aivm_models/install`, {
+                method: 'POST',
+                body: form
+            });
+            if (!response.ok) {
+                const detail = await response.text();
+                throw new Error(detail || `HTTP ${response.status}`);
+            }
+            return { success: true };
+        } catch (error) {
+            console.error('話者モデルの追加に失敗しました:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('uninstall-aivm-model', async (event, address = DEFAULT_AIVIS_HOST, modelUuid) => {
+        if (typeof modelUuid !== 'string' || !/^[0-9a-f-]{36}$/i.test(modelUuid)) {
+            return { success: false, error: '削除対象の話者モデルを特定できません。' };
+        }
+
+        try {
+            const response = await fetch(
+                `${address.replace(/\/$/, '')}/aivm_models/${encodeURIComponent(modelUuid)}/uninstall`,
+                { method: 'DELETE' }
+            );
+            if (!response.ok) {
+                const detail = await response.text();
+                throw new Error(detail || `HTTP ${response.status}`);
+            }
+            return { success: true };
+        } catch (error) {
+            console.error('話者モデルの削除に失敗しました:', error);
+            return { success: false, error: error.message };
+        }
     });
 }
 

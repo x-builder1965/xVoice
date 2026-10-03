@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.03.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.04.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -66,6 +66,9 @@ const settingsFilePath = getUserSettingsPath(); // 設定ファイルパス取�
 let mainContainer = null;        // メインコンテンツ要素（全体のレイアウト領域）
 let btnTheme = null;             // テーマ切り替えボタン（ダーク/ライトモード）
 let speakerSelect = null;        // 話者（ボイス/キャラクター）選択ドロップダウン
+let btnAddSpeakerModel = null;   // 話者モデル追加ボタン
+let speakerListToggle = null;    // 話者リスト表示ボタン
+let speakerList = null;          // 話者とモデル削除ボタンの一覧
 let speakerOptionsByIcon = [];   // 行頭アイコンから話者IDを引くための一覧
 let btnConnect = null;           // 音声合成エンジン接続ボタン
 let inputAddress = null;         // エンジンサーバーアドレス入力欄
@@ -135,6 +138,7 @@ let previousText = '';           // テキスト内容の変更検知用
 let textBackup = '';             // テキスト自動バックアップデータ
 let isGenerating = false;        // mp3ファイル生成処理中フラグ
 let isGenerateCanceled = false;  // mp3ファイル生成キャンセル要求フラグ
+let isManagingAivmModel = false;
 let isEngineReady = false;       // エンジン接続状態フラグ
 let toastTimer = null;           // トースト表示タイマーID
 let toastRemainingTime = 0;      // トースト一時停止時の残り表示時間
@@ -229,6 +233,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     registerInputAddressChange();
     // 話者モデルの変更イベント
     registerSpeakerSelectChange();
+    // 話者モデル追加・削除イベント
+    registerAivmModelButtons();
     // フォントサイズの変更イベント
     registerFontSizeSelectChange();
     // テキスト向きの変更イベント
@@ -302,6 +308,9 @@ async function setupAllDomSettings() {
     mainContainer = document.querySelector('.main-container');
     btnTheme = document.getElementById('btn-theme');
     speakerSelect = document.getElementById('speaker');
+    btnAddSpeakerModel = document.getElementById('btn-add-speaker-model');
+    speakerListToggle = document.getElementById('speaker-list-toggle');
+    speakerList = document.getElementById('speaker-list');
     btnConnect = document.getElementById('btn-connect');
     inputAddress = document.getElementById('input-address');
     engineProgress = document.getElementById('engine-progress');
@@ -643,6 +652,7 @@ function setupTheme() {
 async function initEngine() {
     if (statusDisplay) statusDisplay.textContent = 'Engine 接続確認中...';
     isEngineReady = false;
+    updateAivmModelButtons();
     if (btnSpeak) btnSpeak.disabled = true;
     if (btnGenerate) btnGenerate.disabled = true;
 
@@ -991,7 +1001,140 @@ function registerSpeakerSelectChange() {
         clearAudioCache();
         localStorageSetItemAndFile(STORAGE_KEYS.SPEAKER, e.target.value);
         if (textInput) textInput.setLineSpeakers(textInput.getLineSpeakers());
+        updateAivmModelButtons();
     });
+}
+
+function registerAivmModelButtons() {
+    btnAddSpeakerModel?.addEventListener('click', async () => {
+        if (!isEngineReady || isManagingAivmModel) return;
+        isManagingAivmModel = true;
+        updateAivmModelButtons();
+        try {
+            const result = await window.api.installAivmModel(getServerAddress());
+            if (result.canceled) return;
+            if (!result.success) throw new Error(result.error || '話者モデルの追加に失敗しました。');
+            clearAudioCache();
+            if (!await loadSpeakers()) {
+                showToast('話者モデルは追加されましたが、話者一覧を更新できませんでした。', 'warning');
+                return;
+            }
+            showToast('話者モデルを追加しました');
+        } catch (error) {
+            showToast(`話者モデルの追加に失敗しました: ${error.message}`, 'error');
+        } finally {
+            isManagingAivmModel = false;
+            updateAivmModelButtons();
+        }
+    });
+
+    speakerListToggle?.addEventListener('click', () => {
+        const isOpen = speakerListToggle.getAttribute('aria-expanded') === 'true';
+        setSpeakerListOpen(!isOpen);
+    });
+
+    speakerList?.addEventListener('click', async event => {
+        const actionButton = event.target.closest('button[data-action]');
+        if (!actionButton || actionButton.disabled) return;
+
+        if (actionButton.dataset.action === 'select') {
+            speakerSelect.value = actionButton.dataset.speakerId;
+            speakerSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            setSpeakerListOpen(false);
+        } else if (actionButton.dataset.action === 'delete') {
+            await uninstallAivmModel(actionButton.dataset.modelUuid, actionButton.dataset.modelName);
+        }
+    });
+
+    document.addEventListener('click', event => {
+        if (!event.target.closest('.speaker-picker')) setSpeakerListOpen(false);
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') setSpeakerListOpen(false);
+    });
+}
+
+async function uninstallAivmModel(modelUuid, modelName) {
+    if (!isEngineReady || !modelUuid || isManagingAivmModel) return;
+    // if (!window.confirm(`話者モデル「${modelName}」を削除しますか？\nこのモデルに含まれる話者がすべて削除されます。`)) return;
+
+    isManagingAivmModel = true;
+    updateAivmModelButtons();
+    try {
+        const result = await window.api.uninstallAivmModel(getServerAddress(), modelUuid);
+        if (!result.success) throw new Error(result.error || '話者モデルの削除に失敗しました。');
+        clearAudioCache();
+        if (!await loadSpeakers()) {
+            showToast('話者モデルは削除されましたが、話者一覧を更新できませんでした。', 'warning');
+            return;
+        }
+        showToast('話者モデルを削除しました');
+    } catch (error) {
+        showToast(`話者モデルの削除に失敗しました: ${error.message}`, 'error');
+    } finally {
+        isManagingAivmModel = false;
+        updateAivmModelButtons();
+    }
+}
+
+function setSpeakerListOpen(isOpen) {
+    if (!speakerList || !speakerListToggle) return;
+    const shouldOpen = isOpen && !speakerListToggle.disabled;
+    speakerList.hidden = !shouldOpen;
+    speakerListToggle.setAttribute('aria-expanded', String(shouldOpen));
+}
+
+function updateAivmModelButtons() {
+    const isBusy = isManagingAivmModel || isPlaying || isGenerating;
+    if (btnAddSpeakerModel) btnAddSpeakerModel.disabled = !isEngineReady || isBusy;
+    if (speakerListToggle) {
+        speakerListToggle.disabled = !isEngineReady || isBusy || !speakerSelect?.options.length;
+        if (speakerListToggle.disabled) setSpeakerListOpen(false);
+        const selectedOption = speakerSelect?.selectedOptions[0];
+        speakerListToggle.textContent = selectedOption?.textContent || '話者がありません';
+        speakerListToggle.title = selectedOption?.textContent || '';
+    }
+    if (speakerList) {
+        speakerList.querySelectorAll('button[data-action]').forEach(button => {
+            button.disabled = !isEngineReady || isBusy;
+        });
+        speakerList.querySelectorAll('.speaker-option-button').forEach(button => {
+            button.setAttribute('aria-pressed', String(button.dataset.speakerId === speakerSelect?.value));
+        });
+    }
+}
+
+function renderSpeakerList() {
+    if (!speakerList || !speakerSelect) return;
+    speakerList.replaceChildren();
+
+    Array.from(speakerSelect.options).forEach(option => {
+        const row = document.createElement('div');
+        row.className = 'speaker-list-item';
+
+        const selectButton = document.createElement('button');
+        selectButton.type = 'button';
+        selectButton.className = 'speaker-option-button';
+        selectButton.dataset.action = 'select';
+        selectButton.dataset.speakerId = option.value;
+        selectButton.textContent = option.textContent;
+        selectButton.setAttribute('aria-pressed', String(option.selected));
+        row.appendChild(selectButton);
+
+        if (option.dataset.modelUuid) {
+            const deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.className = 'speaker-delete-button';
+            deleteButton.dataset.action = 'delete';
+            deleteButton.dataset.modelUuid = option.dataset.modelUuid;
+            deleteButton.dataset.modelName = option.dataset.persistName;
+            deleteButton.textContent = '🗑️';
+            deleteButton.setAttribute('aria-label', `話者モデル「${option.dataset.persistName}」を削除`);
+            row.appendChild(deleteButton);
+        }
+        speakerList.appendChild(row);
+    });
+    updateAivmModelButtons();
 }
 
 // フォントサイズの変更イベント
@@ -1825,6 +1968,9 @@ async function handleConnectToggle() {
             speakerSelect.innerHTML = '<option value="">未接続</option>';
             speakerSelect.disabled = true;
         }
+        renderSpeakerList();
+        setSpeakerListOpen(false);
+        updateAivmModelButtons();
         if (btnSpeak) btnSpeak.disabled = true;
         if (btnGenerate) btnGenerate.disabled = true;
         showToast('Engine 切断しました');
@@ -1877,6 +2023,7 @@ function updateConnectionUI(connected) {
         if (btnSpeak) btnSpeak.disabled = false;
         if (btnGenerate) btnGenerate.disabled = false;
         if (speakerSelect) speakerSelect.disabled = false;
+        updateAivmModelButtons();
     } else {
         btnConnect.textContent = '🔄';
         btnConnect.classList.remove('connect-active');
@@ -1888,6 +2035,8 @@ function updateConnectionUI(connected) {
         if (btnSpeak) btnSpeak.disabled = true;
         if (btnGenerate) btnGenerate.disabled = true;
         if (speakerSelect) speakerSelect.disabled = true;
+        setSpeakerListOpen(false);
+        updateAivmModelButtons();
     }
 }
 
@@ -2035,6 +2184,7 @@ async function loadFileContent(path, content) {
 // 再生／停止ボタン切替
 function updateButtonStates(playing) {
     isPlaying = playing;
+    updateAivmModelButtons();
 
     if (btnSpeak) {
         if (playing) {
@@ -2067,6 +2217,7 @@ function updateButtonStates(playing) {
 function resetGenerateButton() {
     isGenerating = false;
     isGenerateCanceled = false;
+    updateAivmModelButtons();
     if (btnGenerate) {
         btnGenerate.textContent = '🎤';
         btnGenerate.classList.remove('generate-active');
@@ -2093,8 +2244,24 @@ async function loadSpeakers() {
         showLoading(true);
         const baseUrl = getServerAddress();
         const res = await fetch(`${baseUrl}/speakers`);
-        if (!res.ok) throw new Error();
+        if (!res.ok) throw new Error(`話者一覧取得失敗: HTTP ${res.status}`);
         const speakers = await res.json();
+        const modelUuidBySpeakerUuid = new Map();
+        try {
+            const modelsRes = await fetch(`${baseUrl}/aivm_models`);
+            if (modelsRes.ok) {
+                const models = await modelsRes.json();
+                Object.entries(models).forEach(([modelUuid, modelInfo]) => {
+                    (modelInfo.manifest?.speakers || []).forEach(modelSpeaker => {
+                        modelUuidBySpeakerUuid.set(modelSpeaker.uuid, modelUuid);
+                    });
+                });
+            } else {
+                console.warn(`話者モデル一覧を取得できませんでした: HTTP ${modelsRes.status}`);
+            }
+        } catch (error) {
+            console.warn('話者モデル一覧を取得できませんでした:', error);
+        }
 
         if (speakerSelect) {
             speakerSelect.innerHTML = '';
@@ -2103,6 +2270,7 @@ async function loadSpeakers() {
                 sp.styles.forEach(style => {
                     const opt = document.createElement('option');
                     opt.value = style.id;
+                    opt.dataset.modelUuid = modelUuidBySpeakerUuid.get(sp.speaker_uuid) || '';
                     const speakerIcon = SPEAKER_ICONS[speakerIconIndex] || '';
                     speakerIconIndex += 1;
                     opt.dataset.icon = speakerIcon;
@@ -2122,15 +2290,16 @@ async function loadSpeakers() {
                 }
             }
             if (textInput) textInput.setLineSpeakers(textInput.getLineSpeakers());
-
         }
 
+        renderSpeakerList();
+        updateAivmModelButtons();
         showToast('話者モデル取得完了');
         // レスポンス受領後（成功・失敗問わず）にローディング非表示
         showLoading(false);
         return true;
     } catch (err) {
-        showToast('Engine 接続できません', 'error');
+        showToast(`Engine 接続できません: ${err.message}`, 'error');
         // レスポンス受領後（成功・失敗問わず）にローディング非表示
         showLoading(false);
         return false;
@@ -2463,6 +2632,7 @@ async function generateFullTextMp3() {
 
     isGenerating = true;
     isGenerateCanceled = false;
+    updateAivmModelButtons();
 
     // 生成開始: アイコンを 🎤 に変更
     renderPlaylistUI();

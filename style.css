@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver2.02.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver2.04.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -391,6 +391,110 @@ select, input[type="file"], input[type="text"] {
     flex: 1 1 200px;
     min-width: 200px;
     font-size: 0.85rem;
+}
+
+.speaker-picker {
+    position: relative;
+    flex: 0 1 100%;
+    /* min-width: 140px; */
+}
+
+.speaker-picker #speaker {
+    display: none;
+}
+
+.speaker-list-toggle {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    padding: 5px 8px;
+    box-sizing: border-box;
+    background: var(--input-bg);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.speaker-list-toggle::after {
+    /* content: "▾"; */
+    content: "▼";
+    margin-left: auto;
+    padding-left: 8px;
+}
+
+.speaker-list-toggle:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.speaker-list {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    z-index: 10010;
+    width: min(100%, calc(100vw - 24px));
+    max-height: min(60vh, 420px);
+    overflow: auto;
+    padding: 4px;
+    box-sizing: border-box;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.speaker-list[hidden] {
+    display: none;
+}
+
+.speaker-list-item {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.speaker-option-button,
+.speaker-delete-button {
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-color);
+    font: inherit;
+    cursor: pointer;
+}
+
+.speaker-option-button {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.speaker-option-button[aria-pressed="true"] {
+    background: var(--highlight-color);
+}
+
+.speaker-option-button:hover,
+.speaker-delete-button:hover {
+    background: var(--secondary-hover);
+}
+
+.speaker-delete-button {
+    flex-shrink: 0;
+}
+
+.speaker-delete-button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 #input-address:focus {

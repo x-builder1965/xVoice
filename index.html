@@ -1,7 +1,7 @@
 <!-- -- index.html ---------------------------------------------------
  copyright = 'Copyright © 2026- @x-builder, Japan';
  email     = 'x-builder@gmail.com';
- appName   = 'xVoice -テキスト音声読み上げ- Ver2.00.0';
+ appName   = 'xVoice -テキスト音声読み上げ- Ver2.04.0';
  --------------------------------------------------------------------- -->
 <!DOCTYPE html>
 <html lang="ja">
@@ -38,7 +38,12 @@
             <!-- サーバー接続および話者選択フィールド -->
             <div class="field">
                 <div class="file-input-group">
-                    <select id="speaker"><option value="">エンジン起動確認中...</option></select>
+                    <div class="speaker-picker">
+                        <select id="speaker" aria-hidden="true" tabindex="-1"><option value="">エンジン起動確認中...</option></select>
+                        <button id="speaker-list-toggle" class="speaker-list-toggle" type="button" aria-expanded="false" aria-controls="speaker-list" disabled>エンジン起動確認中...</button>
+                        <div id="speaker-list" class="speaker-list" role="group" aria-label="話者リスト" hidden></div>
+                    </div>
+                    <button id="btn-add-speaker-model" class="file-select-btn" type="button" data-tooltip="話者モデル追加">🎤</button>
                     <button id="btn-connect" class="file-select-btn" type="button" data-tooltip="AivisSpeech Engine接続 (Ctrl+n)">🔄</button>
                     <input type="text" id="input-address" placeholder="http://127.0.0.1:10101" data-tooltip="サーバーアドレス">
                     <!-- キャッシュ表示群 -->
