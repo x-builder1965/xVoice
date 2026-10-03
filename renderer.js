@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.02.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.03.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -1076,6 +1076,8 @@ function parseStoredText(value) {
 function serializeTextWithSpeakers(value) {
     const lines = String(value ?? '').replace(/\r\n/g, '\n').split('\n');
     const speakers = textInput?.getLineSpeakers() || [];
+    if (!lines.some((_, index) => speakers[index])) return lines.join('\n');
+
     return lines.map((line, index) => {
         const token = speakers[index];
         const option = getSpeakerOption(token);
@@ -1986,11 +1988,14 @@ async function saveFileContent(selectedIndex, currentText, compulsion = false) {
                 if (currentItem) {
                     currentItem.path = result.filePath;
                     currentItem.content = serializedText;
-                    /*
-                    renderPlaylistUI();
-                    filePathDisplay.value = selectedIndex;
-                    */
+                } else if (playlist.length === 0) {
+                    playlist.push({ path: result.filePath, content: serializedText });
+                    playingIndex = 0;
                 }
+
+                await localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST, JSON.stringify(playlist));
+                renderPlaylistUI();
+                if (currentItem && filePathDisplay) filePathDisplay.value = selectedIndex;
     
                 btnSave.classList.remove('change-active');
                 localStorageSetItemAndFile(STORAGE_KEYS.TEXT_BACKUP, textBackup);

@@ -1,6 +1,6 @@
 {
   "name": "xvoice",
-  "version": "2.02.0",
+  "version": "2.03.0",
   "description": "xVoice Text-to-Speech",
   "main": "main.js",
   "author": "x-builder",
@@ -49,6 +49,7 @@
       "main.js",
       "preload.js",
       "renderer.js",
+      "codemirror.js",
       "codemirror.bundle.js",
       "style.css",
       "index.html",
