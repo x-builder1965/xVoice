@@ -146,8 +146,9 @@ let toastRemainingTime = 0;      // トースト一時停止時の残り表示�
 let toastStartTime = 0;          // トースト表示開始タイムスタンプ
 let isPrefetching = false;       // ループ重複実行防止フラグ
 let playSessionId = 0;           // セッション管理用ID（競合防止）
-let activeFetchCount = 0;           // 現在通信中のリクエスト数
+let activeFetchCount = 0;        // 現在通信中のリクエスト数
 let currentAbortController = null; // 通信中断用コントローラー
+let lastCommentIndex = -1;       // 最後にコメント表示した行インデックス
 
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔲初期設定🔲
@@ -2359,15 +2360,16 @@ async function playSpeakerPreview(speakerId, speakerName) {
     // 時間帯に応じた挨拶を取得する関数
     const getGreeting = () => {
         const hour = new Date().getHours();
-        if (hour >= 5 && hour < 11) {
+        if (hour >= 4 && hour < 10) {
             return "おはようございます";
-        } else if (hour >= 11 && hour < 18) {
+        } else if (hour >= 10 && hour < 19) {
             return "こんにちは";
-        } else {
+        } else if (hour >= 19 && hour < 24) {
             return "こんばんは";
+        } else {
+            return "おやすみなさい";
         }
     };
-
     // 一言のバリエーション（必要に応じて自由に追加・編集できます）
     const comments = [
         "よろしくお願いします。",
@@ -2381,11 +2383,27 @@ async function playSpeakerPreview(speakerId, speakerName) {
         "ちょっと一息入れてくださいね。",
         "いつでも声をかけてください。"
     ];
+    // 話者の名前と挨拶を組み合わせて一言を生成する関数
+    const getEnhancedRandomComment = (comments) => {
+        if (!comments || comments.length === 0) return "";
+        if (comments.length === 1) return comments[0];
+
+        let randomIndex;
+        const array = new Uint32Array(1);
+
+        do {
+            crypto.getRandomValues(array);
+            randomIndex = array[0] % comments.length;
+        } while (randomIndex === lastCommentIndex);
+
+        lastCommentIndex = randomIndex;
+        return comments[randomIndex];
+    };
 
     // 読み上げ文章の組み立て
     const greeting = getGreeting();
     const namePart = `${speakerName}です。`;
-    const comment = comments[Math.floor(Math.random() * comments.length)]; // ランダム抽出
+    const comment = getEnhancedRandomComment(comments);
     const previewText = `${greeting}。${namePart}${comment}`;
 
     try {
