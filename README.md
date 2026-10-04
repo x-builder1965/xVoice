@@ -1,4 +1,4 @@
-# xVoice
+# xVoice -テキスト音声読み上げ- (xVoice-windows)
 
 `xVoice` は、[AivisSpeech Engine](https://github.com/Aivis-Project/AivisSpeech) を利用してテキストの読み上げ、音声生成、MP3 出力を行う Windows 向け Electron アプリです。  
 現在のコードベースでは、単一のテキスト編集中でもファイル単位・複数ファイル単位の再生、話者モデル管理、プレイリスト管理、音量と速度制御、テーマ切り替えまで一通り扱える構成になっています。
