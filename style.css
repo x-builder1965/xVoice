@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver2.04.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver2.05.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -460,6 +460,7 @@ select, input[type="file"], input[type="text"] {
 }
 
 .speaker-option-button,
+.speaker-preview-button,
 .speaker-delete-button {
     padding: 6px 8px;
     border: 0;
@@ -484,14 +485,17 @@ select, input[type="file"], input[type="text"] {
 }
 
 .speaker-option-button:hover,
+.speaker-preview-button:hover,
 .speaker-delete-button:hover {
     background: var(--secondary-hover);
 }
 
+.speaker-preview-button,
 .speaker-delete-button {
     flex-shrink: 0;
 }
 
+.speaker-preview-button:disabled,
 .speaker-delete-button:disabled {
     opacity: 0.4;
     cursor: not-allowed;

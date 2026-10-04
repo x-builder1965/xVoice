@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.04.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.05.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -139,6 +139,7 @@ let textBackup = '';             // テキスト自動バックアップデー�
 let isGenerating = false;        // mp3ファイル生成処理中フラグ
 let isGenerateCanceled = false;  // mp3ファイル生成キャンセル要求フラグ
 let isManagingAivmModel = false;
+let isPlayingSpeakerPreview = false;
 let isEngineReady = false;       // エンジン接続状態フラグ
 let toastTimer = null;           // トースト表示タイマーID
 let toastRemainingTime = 0;      // トースト一時停止時の残り表示時間
@@ -1041,6 +1042,8 @@ function registerAivmModelButtons() {
             speakerSelect.value = actionButton.dataset.speakerId;
             speakerSelect.dispatchEvent(new Event('change', { bubbles: true }));
             setSpeakerListOpen(false);
+        } else if (actionButton.dataset.action === 'preview') {
+            await playSpeakerPreview(actionButton.dataset.speakerId, actionButton.dataset.speakerName);
         } else if (actionButton.dataset.action === 'delete') {
             await uninstallAivmModel(actionButton.dataset.modelUuid, actionButton.dataset.modelName);
         }
@@ -1085,7 +1088,7 @@ function setSpeakerListOpen(isOpen) {
 }
 
 function updateAivmModelButtons() {
-    const isBusy = isManagingAivmModel || isPlaying || isGenerating;
+    const isBusy = isManagingAivmModel || isPlaying || isGenerating || isPlayingSpeakerPreview;
     if (btnAddSpeakerModel) btnAddSpeakerModel.disabled = !isEngineReady || isBusy;
     if (speakerListToggle) {
         speakerListToggle.disabled = !isEngineReady || isBusy || !speakerSelect?.options.length;
@@ -1122,6 +1125,16 @@ function renderSpeakerList() {
         row.appendChild(selectButton);
 
         if (option.dataset.modelUuid) {
+            const previewButton = document.createElement('button');
+            previewButton.type = 'button';
+            previewButton.className = 'speaker-preview-button';
+            previewButton.dataset.action = 'preview';
+            previewButton.dataset.speakerId = option.value;
+            previewButton.dataset.speakerName = option.dataset.speakerName;
+            previewButton.textContent = '▶️';
+            previewButton.setAttribute('aria-label', `話者モデル「${option.dataset.speakerName}」を再生`);
+            row.appendChild(previewButton);
+
             const deleteButton = document.createElement('button');
             deleteButton.type = 'button';
             deleteButton.className = 'speaker-delete-button';
@@ -2185,6 +2198,7 @@ async function loadFileContent(path, content) {
 function updateButtonStates(playing) {
     isPlaying = playing;
     updateAivmModelButtons();
+    const isBusy = playing || isGenerating || isPlayingSpeakerPreview;
 
     if (btnSpeak) {
         if (playing) {
@@ -2198,17 +2212,18 @@ function updateButtonStates(playing) {
             btnSpeak.classList.remove('play-active');
             textInput.style.cursor = 'text';
         }
+        btnSpeak.disabled = !isEngineReady || isPlayingSpeakerPreview;
     }
 
     if (btnGenerate && !isGenerating) {
-        btnGenerate.disabled = playing || !isEngineReady || !textInput.value.trim();
+        btnGenerate.disabled = isBusy || !isEngineReady || !textInput.value.trim();
     }
-    if (speakerSelect) speakerSelect.disabled = playing || isGenerating;
-    if (btnConnect) btnConnect.disabled = playing || isGenerating;
-    if (btnFileClear) btnFileClear.disabled = playing || isGenerating;
-    if (btnFolderSelect) btnFolderSelect.disabled = playing || isGenerating;
-    if (btnFileSelect) btnFileSelect.disabled = playing || isGenerating;
-    if (textInput) textInput.readOnly = playing || isGenerating;
+    if (speakerSelect) speakerSelect.disabled = isBusy;
+    if (btnConnect) btnConnect.disabled = isBusy;
+    if (btnFileClear) btnFileClear.disabled = isBusy;
+    if (btnFolderSelect) btnFolderSelect.disabled = isBusy;
+    if (btnFileSelect) btnFileSelect.disabled = isBusy;
+    if (textInput) textInput.readOnly = isBusy;
 
     renderPlaylistUI();
 }
@@ -2271,6 +2286,7 @@ async function loadSpeakers() {
                     const opt = document.createElement('option');
                     opt.value = style.id;
                     opt.dataset.modelUuid = modelUuidBySpeakerUuid.get(sp.speaker_uuid) || '';
+                    opt.dataset.speakerName = sp.name;
                     const speakerIcon = SPEAKER_ICONS[speakerIconIndex] || '';
                     speakerIconIndex += 1;
                     opt.dataset.icon = speakerIcon;
@@ -2316,6 +2332,7 @@ async function fetchAudioBuffer(text, speakerId, options = {}) {
         method: 'POST',
         signal: options.signal
     });
+    if (!queryRes.ok) throw new Error(`音声クエリ生成失敗: HTTP ${queryRes.status}`);
     const audioQuery = await queryRes.json();
 
     const synthRes = await fetch(`${baseUrl}/synthesis?speaker=${speakerId}`, {
@@ -2324,8 +2341,42 @@ async function fetchAudioBuffer(text, speakerId, options = {}) {
         body: JSON.stringify(audioQuery),
         signal: options.signal
     });
+    if (!synthRes.ok) throw new Error(`音声合成失敗: HTTP ${synthRes.status}`);
 
     return await synthRes.arrayBuffer();
+}
+
+async function playSpeakerPreview(speakerId, speakerName) {
+    if (!isEngineReady || isPlaying || isGenerating || isManagingAivmModel || isPlayingSpeakerPreview) return;
+
+    isPlayingSpeakerPreview = true;
+    updateButtonStates(isPlaying);
+    let previewAudio = null;
+    let previewUrl = null;
+
+    try {
+        const text = `はじめまして、${speakerName}です。よろしくおねがいします。`;
+        const audioData = await fetchAudioBuffer(text, speakerId);
+        previewUrl = URL.createObjectURL(new Blob([audioData], { type: 'audio/wav' }));
+        previewAudio = new Audio(previewUrl);
+        previewAudio.volume = audioPlayer?.volume ?? 1;
+
+        await new Promise((resolve, reject) => {
+            previewAudio.addEventListener('ended', resolve, { once: true });
+            previewAudio.addEventListener('error', () => reject(new Error('音声の再生に失敗しました。')), { once: true });
+            previewAudio.play().catch(reject);
+        });
+    } catch (error) {
+        showToast(`話者モデルの再生に失敗しました: ${error.message}`, 'error');
+    } finally {
+        if (previewAudio) {
+            previewAudio.pause();
+            previewAudio.src = '';
+        }
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        isPlayingSpeakerPreview = false;
+        updateButtonStates(isPlaying);
+    }
 }
 
 // 再生停止
