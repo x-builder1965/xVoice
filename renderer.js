@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.05.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.06.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -1092,7 +1092,9 @@ function updateAivmModelButtons() {
     if (btnAddSpeakerModel) btnAddSpeakerModel.disabled = !isEngineReady || isBusy;
     if (speakerListToggle) {
         speakerListToggle.disabled = !isEngineReady || isBusy || !speakerSelect?.options.length;
-        if (speakerListToggle.disabled) setSpeakerListOpen(false);
+        if (speakerListToggle.disabled && !isManagingAivmModel && !isPlayingSpeakerPreview) {
+            setSpeakerListOpen(false);
+        }
         const selectedOption = speakerSelect?.selectedOptions[0];
         speakerListToggle.textContent = selectedOption?.textContent || '話者がありません';
         speakerListToggle.title = selectedOption?.textContent || '';
@@ -2354,9 +2356,40 @@ async function playSpeakerPreview(speakerId, speakerName) {
     let previewAudio = null;
     let previewUrl = null;
 
+    // 時間帯に応じた挨拶を取得する関数
+    const getGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour >= 5 && hour < 11) {
+            return "おはようございます";
+        } else if (hour >= 11 && hour < 18) {
+            return "こんにちは";
+        } else {
+            return "こんばんは";
+        }
+    };
+
+    // 一言のバリエーション（必要に応じて自由に追加・編集できます）
+    const comments = [
+        "よろしくお願いします。",
+        "今日も一日がんばりましょう。",
+        "素敵な一日になりますように。",
+        "準備はバッチリです。",
+        "お話しできるのを楽しみにしています。",
+        "最近、調子はいかがですか？",
+        "今日も無理せずいきましょうね。",
+        "何かお困りのことはありませんか？",
+        "ちょっと一息入れてくださいね。",
+        "いつでも声をかけてください。"
+    ];
+
+    // 読み上げ文章の組み立て
+    const greeting = getGreeting();
+    const namePart = `${speakerName}です。`;
+    const comment = comments[Math.floor(Math.random() * comments.length)]; // ランダム抽出
+    const previewText = `${greeting}。${namePart}${comment}`;
+
     try {
-        const text = `はじめまして、${speakerName}です。よろしくおねがいします。`;
-        const audioData = await fetchAudioBuffer(text, speakerId);
+        const audioData = await fetchAudioBuffer(previewText, speakerId);
         previewUrl = URL.createObjectURL(new Blob([audioData], { type: 'audio/wav' }));
         previewAudio = new Audio(previewUrl);
         previewAudio.volume = audioPlayer?.volume ?? 1;
