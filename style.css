@@ -1,7 +1,7 @@
 /* -- style.css --------------------------------------------------------
  * copyright = 'Copyright © 2026- @x-builder, Japan';
  * email     = 'x-builder@gmail.com';
- * appName   = 'xVoice -テキスト音声読み上げ- Ver2.07.0';
+ * appName   = 'xVoice -テキスト音声読み上げ- Ver2.08.0';
  * --------------------------------------------------------------------- */
 :root {
     /* デフォルト：ダークテーマ */
@@ -1075,7 +1075,6 @@ caption {
 .changelog-list li {
     margin-top: 0.2em;
     border-bottom: 1px solid var(--border-color);
-    /* padding-bottom: 0.1em; */
     white-space: pre-wrap;
     font-size: 1.2vw;
     line-height: 1.6;
@@ -1089,6 +1088,10 @@ caption {
 }
 .changelog-list li:hover {
     background-color: var(--table-hover-bg);
+    transition: background-color 0.3s ease;
+}
+.changelog-list li.sub-title:hover {
+    background-color: var(--primary-hover);
     transition: background-color 0.3s ease;
 }
 
