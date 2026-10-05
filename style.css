@@ -37,6 +37,7 @@
     --table-hover-bg: #404040;
     --table-shadow: rgba(0, 0, 0, 0.6);
     --subtitle-bg: rgba(0, 102, 204, 0.514);
+    --subtitle-bg-hover: rgba(0, 102, 204, 0.7);
     --text-muted: #aaaaaab4;
     --sub-item-text: #b0bec5;
 }
@@ -75,6 +76,7 @@
     --table-hover-bg: #f0f4f8;
     --table-shadow: rgba(0, 0, 0, 0.1);
     --subtitle-bg: rgba(0, 102, 204, 0.15);
+    --subtitle-bg-hover: rgba(204, 223, 241, 1.0);
     --text-muted: #777777;
     --sub-item-text: #546e7a;
 }
@@ -886,7 +888,7 @@ button, select, input {
     display: none;
 }
 
-
+/* ヘルプと変更履歴のコンテナスタイル */
 .help-container,
 .changelog-container {
     width: 100%;
@@ -1091,7 +1093,7 @@ caption {
     transition: background-color 0.3s ease;
 }
 .changelog-list li.sub-title:hover {
-    background-color: var(--primary-hover);
+    background-color: var(--subtitle-bg-hover);
     transition: background-color 0.3s ease;
 }
 
