@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.09.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.10.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -11,12 +11,14 @@ const fs = require('fs').promises;
 const os = require('os');
 const http = require('http');
 const { exec, spawn } = require('child_process');
+const { randomUUID } = require('crypto');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
 const sevenZipPath = require('7zip-bin-full').path7z.replace('app.asar', 'app.asar.unpacked');
 const gotTheLock = app.requestSingleInstanceLock();     // 🔧 単一インスタンスロックの取得（重複起動の判定）
 const activeArchiveExtractions = new Map();
 const ARCHIVE_EXTENSIONS = new Set(['.zip', '.rar', '.7z']);
+const ARCHIVE_SOURCE_METADATA = '.xvoice-archive-source.json';
 
 // AivisSpeech-Engine定義
 const ENGINE_PATH = 'C:\\Program Files\\AivisSpeech\\AivisSpeech-Engine';
@@ -69,6 +71,8 @@ registerIpcMainSelectFile();
 registerIpcMainReadFileByPath();
 // テキスト保存用 IPC Main 処理ハンドラー
 registerIpcMainSaveTextFile();
+// 圧縮ファイル内テキスト保存用 IPC ハンドラー
+registerIpcMainSaveArchiveTextFile();
 // 設定ファイル保存用 IPC Main 処理ハンドラー
 registerIpcMainSaveSettingsFile();
 // プレイリスト保存 IPCハンドラー
@@ -393,6 +397,134 @@ function registerIpcMainSaveTextFile() {
             return { success: false, error: error.message };
         }
     });
+}
+
+function registerIpcMainSaveArchiveTextFile() {
+    ipcMain.handle('save-archive-text-file', async (event, textContent, targetPath) => {
+        if (typeof textContent !== 'string' || typeof targetPath !== 'string') {
+            throw new Error('圧縮ファイル内テキストの保存データが不正です。');
+        }
+
+        const extractionRoot = path.resolve(path.join(app.getPath('temp'), 'xVoice-archives'));
+        const resolvedTargetPath = path.resolve(targetPath);
+        if (!isPathWithinDirectory(resolvedTargetPath, extractionRoot)) {
+            throw new Error('圧縮ファイルの展開先以外には保存できません。');
+        }
+
+        const relativeTargetPath = path.relative(extractionRoot, resolvedTargetPath);
+        const extractionName = relativeTargetPath.split(path.sep)[0];
+        const extractionPath = path.join(extractionRoot, extractionName);
+        const metadataPath = path.join(extractionPath, ARCHIVE_SOURCE_METADATA);
+        const [realExtractionPath, realTargetPath] = await Promise.all([
+            fs.realpath(extractionPath),
+            fs.realpath(resolvedTargetPath)
+        ]);
+        let metadata;
+        try {
+            metadata = JSON.parse(await fs.readFile(metadataPath, 'utf-8'));
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                throw new Error('元の圧縮ファイル情報がありません。圧縮ファイルを再度開いてください。');
+            }
+            throw error;
+        }
+        if (!metadata || typeof metadata.archivePath !== 'string') {
+            throw new Error('元の圧縮ファイル情報が不正です。圧縮ファイルを再度開いてください。');
+        }
+        if (!isPathWithinDirectory(realTargetPath, realExtractionPath)) {
+            throw new Error('展開先フォルダ外を指すファイルには保存できません。');
+        }
+
+        const archivePath = path.resolve(metadata.archivePath);
+        const archiveExtension = path.extname(archivePath).toLowerCase();
+        if (!ARCHIVE_EXTENSIONS.has(archiveExtension)) {
+            throw new Error('元の圧縮ファイル情報が不正です。圧縮ファイルを再度開いてください。');
+        }
+        await fs.access(archivePath);
+
+        let archiveTool = sevenZipPath;
+        let archiveToolSwitches = ['-y', '-bd'];
+        if (archiveExtension === '.rar') {
+            archiveTool = await findWinRarExecutable();
+            if (!archiveTool) {
+                throw new Error('RAR形式の更新にはWinRARが必要です。WinRARが見つからないため、テキストは保存されていません。');
+            }
+            archiveToolSwitches = ['-y'];
+        }
+
+        const relativePath = path.relative(realExtractionPath, realTargetPath);
+        await fs.writeFile(realTargetPath, textContent, 'utf-8');
+
+        const temporaryArchivePath = path.join(
+            path.dirname(archivePath),
+            `${path.basename(archivePath, archiveExtension)}.xvoice-${randomUUID()}${archiveExtension}`
+        );
+        try {
+            await fs.copyFile(archivePath, temporaryArchivePath);
+            await runArchiveCommand(
+                archiveTool,
+                ['d', temporaryArchivePath, relativePath, ...archiveToolSwitches],
+                realExtractionPath
+            );
+            await runArchiveCommand(
+                archiveTool,
+                ['a', temporaryArchivePath, relativePath, ...archiveToolSwitches],
+                realExtractionPath
+            );
+            await fs.rename(temporaryArchivePath, archivePath);
+        } finally {
+            await fs.rm(temporaryArchivePath, { force: true });
+        }
+
+        return { success: true, filePath: realTargetPath };
+    });
+}
+
+function runArchiveCommand(executable, args, cwd) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(executable, args, { cwd, windowsHide: true });
+        let output = '';
+        child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
+        child.stdout.on('data', chunk => {
+            output = `${output}${chunk}`.slice(-4000);
+        });
+        child.stderr.on('data', chunk => {
+            output = `${output}${chunk}`.slice(-4000);
+        });
+        child.once('error', reject);
+        child.once('close', code => {
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(new Error(output.trim() || `圧縮ファイルの更新に失敗しました (終了コード: ${code})`));
+            }
+        });
+    });
+}
+
+async function findWinRarExecutable() {
+    const installationRoots = [
+        process.env.ProgramFiles,
+        process.env['ProgramFiles(x86)'],
+        process.env.ProgramW6432
+    ].filter(Boolean);
+    const executableNames = ['rar.exe', 'WinRAR.exe'];
+    const pathEntries = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+    const candidates = [
+        ...installationRoots.flatMap(root => executableNames.map(name => path.join(root, 'WinRAR', name))),
+        ...pathEntries.flatMap(root => executableNames.map(name => path.join(root, name)))
+    ];
+
+    for (const candidate of candidates) {
+        try {
+            await fs.access(candidate);
+            return candidate;
+        } catch {
+            // Try the next standard WinRAR installation path.
+        }
+    }
+    return null;
 }
 
 // 設定ファイル保存用 IPC Main 処理ハンドラー
@@ -755,6 +887,11 @@ async function extractArchive(archivePath) {
                     }
                 });
             });
+            await fs.writeFile(
+                path.join(extractionPath, ARCHIVE_SOURCE_METADATA),
+                JSON.stringify({ archivePath: resolvedArchivePath }),
+                { encoding: 'utf-8', flag: 'wx' }
+            );
             return extractionPath;
         } catch (error) {
             await fs.rm(extractionPath, { recursive: true, force: true });

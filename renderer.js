@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.09.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.10.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -643,7 +643,7 @@ async function setupFilePathAndText() {
     // 7. バックアップテキストの比較・変更フラグ更新
     textBackup = parseStoredText(localSettings[STORAGE_KEYS.TEXT_BACKUP] || '').text;
     if (textBackup !== (textInput ? textInput.value : '')) {
-        if (btnSave && !isCurrentItemArchiveExtracted()) btnSave.classList.add('change-active');
+        if (btnSave) btnSave.classList.add('change-active');
     }
 }
 
@@ -1422,9 +1422,7 @@ function registerTextInputInput() {
             btnGenerate.disabled = !isEngineReady || !currentText.trim();
         }
 
-        if (isCurrentItemArchiveExtracted()) {
-            btnSave.classList.remove('change-active');
-        } else if (currentText !== textBackup) {
+        if (currentText !== textBackup) {
             btnSave.classList.add('change-active');
         } else {
             btnSave.classList.remove('change-active');
@@ -2161,8 +2159,26 @@ async function saveFileContent(selectedIndex, currentText, compulsion = false) {
     // テキスト変更チェック & 保存ダイアログ表示
     const currentItem = playlist[selectedIndex];
     if (currentItem?.isArchiveExtracted) {
-        btnSave.disabled = true;
-        btnSave.classList.remove('change-active');
+        if (typeof textBackup !== 'undefined' && (currentText !== textBackup || compulsion)) {
+            try {
+                const serializedText = serializeTextWithSpeakers(currentText);
+                const result = await window.api.saveArchiveTextFile(serializedText, currentItem.path);
+                if (!result.success) {
+                    throw new Error(result.error || '圧縮ファイルを更新できませんでした。');
+                }
+
+                textBackup = currentText;
+                currentItem.content = serializedText;
+                await localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST, JSON.stringify(playlist));
+                await localStorageSetItemAndFile(STORAGE_KEYS.TEXT_BACKUP, textBackup);
+                btnSave.classList.remove('change-active');
+                showToast('圧縮ファイルに保存しました');
+            } catch (error) {
+                console.error('圧縮ファイルの保存に失敗しました:', error);
+                btnSave.classList.add('change-active');
+                showToast(`圧縮ファイルの保存に失敗しました: ${error.message}`, 'error');
+            }
+        }
         return;
     }
     const rawPath = currentItem ? currentItem.path : '';
@@ -2270,18 +2286,10 @@ function getCurrentPlaylistItem() {
     return playlist[itemIndex] || null;
 }
 
-function isCurrentItemArchiveExtracted() {
-    return Boolean(getCurrentPlaylistItem()?.isArchiveExtracted);
-}
-
 function updateSaveButtonForCurrentItem() {
     if (!btnSave) return;
 
-    const isArchiveExtracted = isCurrentItemArchiveExtracted();
-    btnSave.disabled = isArchiveExtracted;
-    if (isArchiveExtracted) {
-        btnSave.classList.remove('change-active');
-    }
+    btnSave.disabled = false;
 }
 
 // 再生／停止ボタン切替
