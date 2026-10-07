@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.06.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.09.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -16,6 +16,7 @@ const STORAGE_KEYS = {
     THEME: 'xVoice_theme',
     PLAYLIST: 'xVoice_playlist',
     PLAYLIST_INDEX: 'xVoice_playlistIndex',
+    ARCHIVE_EXTRACTED: 'xVoice_archiveExtractedByPath',
     TEXT: 'xVoice_text',
     TEXT_BACKUP: 'xVoice_textBackup',
     LINE_INDEX: 'xVoice_lineIndex',
@@ -184,10 +185,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const launchData = await window.api.getLaunchArgs();
     if (launchData) {
         // 引数ファイルの復元
-        setupFilePathAndTextArgs(launchData);
+        await setupFilePathAndTextArgs(launchData);
     } else {
         // ファイルパス＆テキストの復元
-        setupFilePathAndText();
+        await setupFilePathAndText();
     }
     // プレイリストの表示を更新
     renderPlaylistUI();
@@ -410,6 +411,7 @@ async function setupAllLocalStorageSetting() {
         localSettings[STORAGE_KEYS.THEME] = localStorage.getItem(STORAGE_KEYS.THEME) || 'dark';
         localSettings[STORAGE_KEYS.PLAYLIST] = localStorage.getItem(STORAGE_KEYS.PLAYLIST);
         localSettings[STORAGE_KEYS.PLAYLIST_INDEX] = localStorage.getItem(STORAGE_KEYS.PLAYLIST_INDEX) || '0';
+        localSettings[STORAGE_KEYS.ARCHIVE_EXTRACTED] = localStorage.getItem(STORAGE_KEYS.ARCHIVE_EXTRACTED) || '{}';
         localSettings[STORAGE_KEYS.TEXT] = localStorage.getItem(STORAGE_KEYS.TEXT);
         localSettings[STORAGE_KEYS.TEXT_BACKUP] = localStorage.getItem(STORAGE_KEYS.TEXT_BACKUP) || '';
         localSettings[STORAGE_KEYS.LINE_INDEX] = localStorage.getItem(STORAGE_KEYS.LINE_INDEX);
@@ -438,6 +440,7 @@ async function setupAllLocalStorageSetting() {
         localSettings[STORAGE_KEYS.THEME] = getVal(STORAGE_KEYS.THEME, localSettings[STORAGE_KEYS.THEME], 'dark');
         localSettings[STORAGE_KEYS.PLAYLIST] = getVal(STORAGE_KEYS.PLAYLIST, localSettings[STORAGE_KEYS.PLAYLIST], null);
         localSettings[STORAGE_KEYS.PLAYLIST_INDEX] = getVal(STORAGE_KEYS.PLAYLIST_INDEX, localSettings[STORAGE_KEYS.PLAYLIST_INDEX], '0');
+        localSettings[STORAGE_KEYS.ARCHIVE_EXTRACTED] = getVal(STORAGE_KEYS.ARCHIVE_EXTRACTED, localSettings[STORAGE_KEYS.ARCHIVE_EXTRACTED], {});
         localSettings[STORAGE_KEYS.TEXT] = getVal(STORAGE_KEYS.TEXT, localSettings[STORAGE_KEYS.TEXT], null);
         localSettings[STORAGE_KEYS.TEXT_BACKUP] = getVal(STORAGE_KEYS.TEXT_BACKUP, localSettings[STORAGE_KEYS.TEXT_BACKUP], '');
         localSettings[STORAGE_KEYS.LINE_INDEX] = getVal(STORAGE_KEYS.LINE_INDEX, localSettings[STORAGE_KEYS.LINE_INDEX], null);
@@ -566,7 +569,7 @@ function setupFontSize() {
 }
 
 // 引数ファイルの設定
-function setupFilePathAndTextArgs(launchData) {
+async function setupFilePathAndTextArgs(launchData) {
     if (launchData && launchData.filePath) {
         playlist = [{ path: launchData.filePath, content: launchData.content }];
         isPlaying = false;
@@ -574,6 +577,8 @@ function setupFilePathAndTextArgs(launchData) {
         localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST, JSON.stringify(playlist));
         localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, '0');
     }
+    await restoreArchiveExtractionFlags();
+    updateSaveButtonForCurrentItem();
 
     if (textInput) {
         const parsedContent = parseStoredText(launchData.content || '');
@@ -591,7 +596,7 @@ function setupFilePathAndTextArgs(launchData) {
 }
 
 // ファイルパス＆テキストの復元
-function setupFilePathAndText() {
+async function setupFilePathAndText() {
     playlist = [];
     isPlaying = false;
     playingIndex = 0;
@@ -608,6 +613,7 @@ function setupFilePathAndText() {
             console.error('PLAYLIST parsing error:', e);
         }
     }
+    await restoreArchiveExtractionFlags();
 
     // 3. STORAGE_KEYS.PLAYLIST_INDEX から保存されているインデックスを取得
     let savedIndex = parseInt(localSettings[STORAGE_KEYS.PLAYLIST_INDEX], 10);
@@ -619,6 +625,7 @@ function setupFilePathAndText() {
     if (filePathDisplay && playlist.length > 0) {
         filePathDisplay.value = savedIndex;
     }
+    updateSaveButtonForCurrentItem();
 
     // 5. テキストエリアの復元
     if (localSettings[STORAGE_KEYS.TEXT] !== null && textInput) {
@@ -636,7 +643,7 @@ function setupFilePathAndText() {
     // 7. バックアップテキストの比較・変更フラグ更新
     textBackup = parseStoredText(localSettings[STORAGE_KEYS.TEXT_BACKUP] || '').text;
     if (textBackup !== (textInput ? textInput.value : '')) {
-        if (btnSave) btnSave.classList.add('change-active');
+        if (btnSave && !isCurrentItemArchiveExtracted()) btnSave.classList.add('change-active');
     }
 }
 
@@ -949,7 +956,7 @@ function registerDocumentDrop() {
                 }
             } catch (err) {
                 console.error('D&D ファイル読み込みエラー:', err);
-                showToast('ファイルの読み込みに失敗しました', 'error');
+                showToast(`ファイルの読み込みに失敗しました: ${err.message}`, 'error');
             }
         }
     });
@@ -1180,7 +1187,7 @@ async function registerFilePathDisplayChange() {
     filePathDisplay?.addEventListener('change', async (e) => {
         // テキスト変更チェック & 保存ダイアログ表示
         const selectedIndex = parseInt(e.target.value, 10);
-        await saveFileContent(selectedIndex, textInput.value);
+        await saveFileContent(playingIndex, textInput.value);
 
         // ダイアログの成否・「保存/キャンセル」に関係なく以降の読み込み処理を実行
         if (!isNaN(selectedIndex) && playlist[selectedIndex]) {
@@ -1319,39 +1326,49 @@ function registerTextInputClick() {
 // 📁 フォルダ選択のクリックイベント
 function registerBtnFolderSelectClick() {
     btnFolderSelect?.addEventListener('click', async () => {
-        const selectedIndex = parseInt(filePathDisplay?.value, 10);
-        await saveFileContent(selectedIndex, textInput.value);
+        try {
+            const selectedIndex = parseInt(filePathDisplay?.value, 10);
+            await saveFileContent(selectedIndex, textInput.value);
 
-        const fileDataList = await window.api.selectFolder();
-        if (!fileDataList || fileDataList.length === 0) return;
+            const fileDataList = await window.api.selectFolder();
+            if (!fileDataList || fileDataList.length === 0) return;
 
-        if (isPlaying) {
-            stopPlayback();
+            if (isPlaying) {
+                stopPlayback();
+            }
+            clearAudioCache();
+            resetProgressBars();
+
+            fileDataList.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' }));
+            addFilesToPlaylist(fileDataList);
+        } catch (error) {
+            console.error('フォルダ読み込みエラー:', error);
+            showToast(`フォルダの読み込みに失敗しました: ${error.message}`, 'error');
         }
-        clearAudioCache();
-        resetProgressBars();
-
-        fileDataList.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' }));
-        addFilesToPlaylist(fileDataList);
     });
 }
 
 // 🗒️ファイル選択のクリックイベント
 function registerBtnFileSelectClick() {
     btnFileSelect?.addEventListener('click', async () => {
-        const selectedIndex = parseInt(filePathDisplay?.value, 10);
-        await saveFileContent(selectedIndex, textInput.value);
+        try {
+            const selectedIndex = parseInt(filePathDisplay?.value, 10);
+            await saveFileContent(selectedIndex, textInput.value);
 
-        const fileDataList = await window.api.selectFile();
-        if (!fileDataList || fileDataList.length === 0) return;
+            const fileDataList = await window.api.selectFile();
+            if (!fileDataList || fileDataList.length === 0) return;
 
-        if (isPlaying) {
-            stopPlayback();
+            if (isPlaying) {
+                stopPlayback();
+            }
+            clearAudioCache();
+            resetProgressBars();
+
+            addFilesToPlaylist(fileDataList);
+        } catch (error) {
+            console.error('ファイル読み込みエラー:', error);
+            showToast(`ファイルの読み込みに失敗しました: ${error.message}`, 'error');
         }
-        clearAudioCache();
-        resetProgressBars();
-
-        addFilesToPlaylist(fileDataList);
     });
 }
 
@@ -1380,6 +1397,7 @@ function registerBtnFileClearClick() {
         previousText = '';
         textBackup = '';
         if (btnSave) btnSave.classList.remove('change-active');
+        updateSaveButtonForCurrentItem();
 
         if (isPlaying) {
             stopPlayback();
@@ -1399,11 +1417,14 @@ function registerBtnFileClearClick() {
 function registerTextInputInput() {
     textInput?.addEventListener('input', () => {
         const currentText = textInput.value.replace(/\r\n/g, '\n');
+        updateSaveButtonForCurrentItem();
         if (btnGenerate && !isGenerating) {
             btnGenerate.disabled = !isEngineReady || !currentText.trim();
         }
 
-        if (currentText !== textBackup) {
+        if (isCurrentItemArchiveExtracted()) {
+            btnSave.classList.remove('change-active');
+        } else if (currentText !== textBackup) {
             btnSave.classList.add('change-active');
         } else {
             btnSave.classList.remove('change-active');
@@ -2139,6 +2160,11 @@ function handleCursorChange() {
 async function saveFileContent(selectedIndex, currentText, compulsion = false) {
     // テキスト変更チェック & 保存ダイアログ表示
     const currentItem = playlist[selectedIndex];
+    if (currentItem?.isArchiveExtracted) {
+        btnSave.disabled = true;
+        btnSave.classList.remove('change-active');
+        return;
+    }
     const rawPath = currentItem ? currentItem.path : '';
     const currentPath = (rawPath === '選択されていません' || rawPath === '設定されていません') ? '' : rawPath;
     if (typeof textBackup !== 'undefined' && (currentText !== textBackup || compulsion)) {
@@ -2174,6 +2200,15 @@ async function saveFileContent(selectedIndex, currentText, compulsion = false) {
 
 // テキストパス・テキスト反映
 async function loadFileContent(path, content) {
+    const currentItem = getCurrentPlaylistItem();
+    if (currentItem) {
+        currentItem.isArchiveExtracted = Boolean(currentItem.isArchiveExtracted);
+        const archiveFlags = getArchiveExtractionFlags();
+        archiveFlags[currentItem.path] = currentItem.isArchiveExtracted;
+        await localStorageSetItemAndFile(STORAGE_KEYS.ARCHIVE_EXTRACTED, archiveFlags);
+        await localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST, JSON.stringify(playlist));
+    }
+    updateSaveButtonForCurrentItem();
     const parsedContent = parseStoredText(content || '');
     const loadedText = parsedContent.text;
 
@@ -2195,6 +2230,58 @@ async function loadFileContent(path, content) {
     clearAudioCache();
     showProgressBar('text');
     moveCursorToLineStart(0);
+}
+
+function getArchiveExtractionFlags() {
+    const storedFlags = localSettings[STORAGE_KEYS.ARCHIVE_EXTRACTED];
+    if (storedFlags && typeof storedFlags === 'object' && !Array.isArray(storedFlags)) {
+        return { ...storedFlags };
+    }
+    if (typeof storedFlags === 'string') {
+        try {
+            const parsedFlags = JSON.parse(storedFlags);
+            if (parsedFlags && typeof parsedFlags === 'object' && !Array.isArray(parsedFlags)) {
+                return parsedFlags;
+            }
+        } catch (error) {
+            console.warn('圧縮展開状態のlocalStorageデータを解析できません:', error);
+        }
+    }
+    return {};
+}
+
+async function restoreArchiveExtractionFlags() {
+    const archiveFlags = getArchiveExtractionFlags();
+    for (const item of playlist) {
+        if (!item || typeof item.path !== 'string') continue;
+        if (Object.prototype.hasOwnProperty.call(archiveFlags, item.path)) {
+            item.isArchiveExtracted = archiveFlags[item.path] === true;
+        } else {
+            archiveFlags[item.path] = Boolean(item.isArchiveExtracted);
+        }
+    }
+    localSettings[STORAGE_KEYS.ARCHIVE_EXTRACTED] = archiveFlags;
+    await localStorageSetItemAndFile(STORAGE_KEYS.ARCHIVE_EXTRACTED, archiveFlags);
+}
+
+function getCurrentPlaylistItem() {
+    const selectedIndex = parseInt(filePathDisplay?.value, 10);
+    const itemIndex = Number.isNaN(selectedIndex) ? playingIndex : selectedIndex;
+    return playlist[itemIndex] || null;
+}
+
+function isCurrentItemArchiveExtracted() {
+    return Boolean(getCurrentPlaylistItem()?.isArchiveExtracted);
+}
+
+function updateSaveButtonForCurrentItem() {
+    if (!btnSave) return;
+
+    const isArchiveExtracted = isCurrentItemArchiveExtracted();
+    btnSave.disabled = isArchiveExtracted;
+    if (isArchiveExtracted) {
+        btnSave.classList.remove('change-active');
+    }
 }
 
 // 再生／停止ボタン切替

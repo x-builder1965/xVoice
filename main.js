@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.04.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.09.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -13,7 +13,10 @@ const http = require('http');
 const { exec, spawn } = require('child_process');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
+const sevenZipPath = require('7zip-bin-full').path7z.replace('app.asar', 'app.asar.unpacked');
 const gotTheLock = app.requestSingleInstanceLock();     // 🔧 単一インスタンスロックの取得（重複起動の判定）
+const activeArchiveExtractions = new Map();
+const ARCHIVE_EXTENSIONS = new Set(['.zip', '.rar', '.7z']);
 
 // AivisSpeech-Engine定義
 const ENGINE_PATH = 'C:\\Program Files\\AivisSpeech\\AivisSpeech-Engine';
@@ -337,9 +340,10 @@ function registerIpcMainSelectFile() {
         const result = await dialog.showOpenDialog({
             properties: ['openFile', 'multiSelections'],
             filters: [
-                { name: 'プレイリスト / テキストファイル', extensions: ['amppl', 'txt'] },
+                { name: 'プレイリスト / テキスト / 圧縮ファイル', extensions: ['amppl', 'txt', 'zip', 'rar', '7z'] },
                 { name: 'テキストファイル (*.txt)', extensions: ['txt'] },
                 { name: 'プレイリストファイル (*.amppl)', extensions: ['amppl'] },
+                { name: '圧縮ファイル (*.zip, *.rar, *.7z)', extensions: ['zip', 'rar', '7z'] },
                 { name: 'すべてのファイル', extensions: ['*'] }
             ]
         });
@@ -348,58 +352,7 @@ function registerIpcMainSelectFile() {
             return null;
         }
 
-        const rawItemMap = new Map();
-
-        for (const selectedPath of result.filePaths) {
-            const ext = path.extname(selectedPath);
-
-            if (ext.toLowerCase() === '.amppl') {
-                const itemsFromPlaylist = await parsePlaylistFile(selectedPath);
-                for (const item of itemsFromPlaylist) {
-                    if (!rawItemMap.has(item.path)) {
-                        rawItemMap.set(item.path, item);
-                    }
-                }
-            } else if (ext.toLowerCase() === '.txt') {
-                try {
-                    const stats = await fs.stat(selectedPath);
-                    const parsedPath = path.parse(selectedPath);
-
-                    if (!rawItemMap.has(selectedPath)) {
-                        rawItemMap.set(selectedPath, {
-                            path: selectedPath,
-                            file: parsedPath.name,
-                            ext: ext.replace(/^\./, ''),
-                            createTime: stats.birthtime
-                        });
-                    }
-                } catch (err) {
-                    console.error(`ファイル情報取得失敗: ${selectedPath}`, err);
-                }
-            }
-        }
-
-        // ファイル内容の読み込みと進捗送信
-        const itemsArray = Array.from(rawItemMap.values());
-        const total = itemsArray.length;
-        const fileDataList = [];
-
-        for (let i = 0; i < total; i++) {
-            const item = itemsArray[i];
-            try {
-                const content = await fs.readFile(item.path, 'utf-8');
-                fileDataList.push({
-                    ...item,
-                    content: content
-                });
-            } catch (err) {
-                console.error(`ファイル読み込み失敗: ${item.path}`, err);
-            }
-            // 進捗状況を通知
-            event.sender.send('playlist-progress', { current: i + 1, total: total });
-        }
-
-        return fileDataList;
+        return await processDroppedPaths(result.filePaths, event.sender);
     });
 }
 
@@ -734,20 +687,90 @@ async function processDroppedPaths(filePaths, webContents) {
             } else if (stats.isFile()) {
                 const ext = path.extname(targetPath).toLowerCase();
                 if (ext === '.txt') {
-                    rawFiles.push({ path: targetPath });
+                    rawFiles.push({ path: targetPath, isArchiveExtracted: isArchiveExtractedPath(targetPath) });
                 } else if (ext === '.amppl') {
                     const playlistItems = await parsePlaylistFile(targetPath);
                     for (const item of playlistItems) {
-                        rawFiles.push({ path: item.path });
+                        rawFiles.push({ path: item.path, isArchiveExtracted: isArchiveExtractedPath(item.path) });
                     }
+                } else if (ARCHIVE_EXTENSIONS.has(ext)) {
+                    const extractionPath = await extractArchive(targetPath);
+                    rawFiles = rawFiles.concat(await collectFilesFromFolder(extractionPath, false, extractionPath));
                 }
             }
         } catch (err) {
+            if (ARCHIVE_EXTENSIONS.has(path.extname(targetPath).toLowerCase()) ||
+                err.message.startsWith('圧縮ファイルを展開できませんでした:')) {
+                throw err;
+            }
             console.warn(`パス処理エラー: ${targetPath}`, err);
         }
     }
 
     return await readFilesWithProgress(rawFiles, webContents);
+}
+
+async function extractArchive(archivePath) {
+    const extractionRoot = path.join(app.getPath('temp'), 'xVoice-archives');
+    const parsedName = path.basename(path.parse(archivePath).name);
+    const extractionName = parsedName && parsedName !== '.' && parsedName !== '..' ? parsedName : 'archive';
+    const extractionPath = path.join(extractionRoot, extractionName);
+    const resolvedArchivePath = path.resolve(archivePath);
+    const activeExtraction = activeArchiveExtractions.get(extractionPath);
+
+    if (activeExtraction) {
+        if (activeExtraction.archivePath.toLowerCase() === resolvedArchivePath.toLowerCase()) {
+            return await activeExtraction.promise;
+        }
+        await activeExtraction.promise.catch(() => {});
+        return await extractArchive(archivePath);
+    }
+
+    const extractionPromise = (async () => {
+        await fs.mkdir(extractionRoot, { recursive: true });
+        await fs.rm(extractionPath, { recursive: true, force: true });
+        await fs.mkdir(extractionPath, { recursive: true });
+
+        try {
+            await new Promise((resolve, reject) => {
+                const child = spawn(sevenZipPath, [
+                    'x',
+                    archivePath,
+                    `-o${extractionPath}`,
+                    '-y',
+                    '-bd'
+                ], { windowsHide: true });
+                let stderr = '';
+                child.stdout.resume();
+                child.stderr.setEncoding('utf8');
+                child.stderr.on('data', chunk => {
+                    stderr = `${stderr}${chunk}`.slice(-4000);
+                });
+                child.once('error', reject);
+                child.once('close', code => {
+                    if (code === 0) {
+                        resolve();
+                    } else {
+                        reject(new Error(stderr.trim() || `7-Zip exited with code ${code}`));
+                    }
+                });
+            });
+            return extractionPath;
+        } catch (error) {
+            await fs.rm(extractionPath, { recursive: true, force: true });
+            throw new Error(`圧縮ファイルを展開できませんでした: ${path.basename(archivePath)} (${error.message})`);
+        }
+    })();
+
+    const extractionRecord = { archivePath: resolvedArchivePath, promise: extractionPromise };
+    activeArchiveExtractions.set(extractionPath, extractionRecord);
+    try {
+        return await extractionPromise;
+    } finally {
+        if (activeArchiveExtractions.get(extractionPath) === extractionRecord) {
+            activeArchiveExtractions.delete(extractionPath);
+        }
+    }
 }
 
 // 単一ファイル（.txt / .amppl）の処理
@@ -794,7 +817,7 @@ async function readFilesWithProgress(items, webContents) {
         const item = uniqueItems[i];
         try {
             const content = await fs.readFile(item.path, 'utf-8');
-            results.push({ path: item.path, content });
+            results.push({ ...item, content });
         } catch (err) {
             console.warn(`ファイル読み込みエラー: ${item.path}`, err);
         }
@@ -807,29 +830,58 @@ async function readFilesWithProgress(items, webContents) {
 }
 
 // ディレクトリ内を再帰的に検索してパスを収集する関数
-async function collectFilesFromFolder(dirPath) {
+async function collectFilesFromFolder(dirPath, includeArchives = true, archiveRoot = null) {
     let fileList = [];
+    let entries;
     try {
-        const entries = await fs.readdir(dirPath, { withFileTypes: true });
-        for (const entry of entries) {
-            const fullPath = path.join(dirPath, entry.name);
-            if (entry.isDirectory()) {
-                const subList = await collectFilesFromFolder(fullPath);
-                fileList = fileList.concat(subList);
-            } else if (entry.isFile()) {
-                const ext = path.extname(entry.name).toLowerCase();
-                if (ext === '.txt') {
-                    fileList.push({ path: fullPath });
-                } else if (ext === '.amppl') {
-                    const playlistItems = await parsePlaylistFile(fullPath);
-                    for (const item of playlistItems) {
-                        fileList.push({ path: item.path });
-                    }
-                }
-            }
-        }
+        entries = await fs.readdir(dirPath, { withFileTypes: true });
     } catch (error) {
         console.error(`フォルダスキャンエラー: ${dirPath}`, error);
+        return fileList;
+    }
+
+    for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+            const subList = await collectFilesFromFolder(fullPath, includeArchives, archiveRoot);
+            fileList = fileList.concat(subList);
+        } else if (entry.isFile()) {
+            const ext = path.extname(entry.name).toLowerCase();
+            if (ext === '.txt') {
+                fileList.push({
+                    path: fullPath,
+                    isArchiveExtracted: Boolean(archiveRoot) || isArchiveExtractedPath(fullPath)
+                });
+            } else if (ext === '.amppl') {
+                const playlistItems = await parsePlaylistFile(fullPath);
+                for (const item of playlistItems) {
+                    fileList.push({
+                        path: item.path,
+                        isArchiveExtracted: isPathWithinDirectory(item.path, archiveRoot) ||
+                            isArchiveExtractedPath(item.path)
+                    });
+                }
+            } else if (includeArchives && ARCHIVE_EXTENSIONS.has(ext)) {
+                const extractionPath = await extractArchive(fullPath);
+                fileList = fileList.concat(await collectFilesFromFolder(extractionPath, false, extractionPath));
+            }
+        }
     }
     return fileList;
+}
+
+function isArchiveExtractedPath(filePath) {
+    return isPathWithinDirectory(filePath, path.join(app.getPath('temp'), 'xVoice-archives'));
+}
+
+function isPathWithinDirectory(filePath, directoryPath) {
+    if (!directoryPath) return false;
+
+    const relativePath = path.relative(path.resolve(directoryPath), path.resolve(filePath));
+    return Boolean(
+        relativePath &&
+        relativePath !== '..' &&
+        !relativePath.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(relativePath)
+    );
 }
