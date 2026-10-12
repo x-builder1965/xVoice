@@ -1,7 +1,7 @@
 // -- main.js ----------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.10.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.11.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 // インクルードエリアス定義
@@ -860,6 +860,38 @@ async function extractArchive(archivePath) {
 
     const extractionPromise = (async () => {
         await fs.mkdir(extractionRoot, { recursive: true });
+
+        // xVoice-archives 内の古い（24時間以上経過した）サブディレクトリを削除するクリーンアップ処理
+        try {
+            const entries = await fs.readdir(extractionRoot, { withFileTypes: true });
+            const now = Date.now();
+            const twentyFourHoursMs = 24 * 60 * 60 * 1000; // 24時間（ミリ秒）
+
+            for (const entry of entries) {
+                if (entry.isDirectory()) {
+                    const subDirPath = path.join(extractionRoot, entry.name);
+                    try {
+                        const stats = await fs.stat(subDirPath);
+                        // 作成日時を取得（取得できない環境を考慮して更新日時mtimeをフォールバックに利用）
+                        const createdTime = (stats.birthtimeMs && stats.birthtimeMs > 0) 
+                            ? stats.birthtimeMs 
+                            : stats.mtimeMs;
+
+                        // 現在日時から24時間を超えている場合は削除
+                        if (now - createdTime > twentyFourHoursMs) {
+                            await fs.rm(subDirPath, { recursive: true, force: true });
+                        }
+                    } catch (statErr) {
+                        console.error(`サブディレクトリのステータス取得エラー: ${subDirPath}`, statErr);
+                        // 個別のディレクトリの読み取り・削除失敗は全体を止めないよう無視
+                    }
+                }
+            }
+        } catch (cleanupError) {
+            console.error('クリーンアップ中のエラー:', cleanupError);
+            // クリーンアップ中のエラーは非致命的なので無視
+        }
+
         await fs.rm(extractionPath, { recursive: true, force: true });
         await fs.mkdir(extractionPath, { recursive: true });
 
