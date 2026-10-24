@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.10.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.12.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -1708,7 +1708,7 @@ function registerBtnPlaylistSaveClick() {
     });
 }
 
-// ⏮️ 前ファイルのクリックイベント
+//  ⏮️ 前ファイルのクリックイベント
 function registerBtnPrevFileClick() {
     btnPrevFile?.addEventListener('click', async () => {
         // プレイリスト未読み込み、または先頭ファイルの場合は移動しない
@@ -1717,22 +1717,34 @@ function registerBtnPrevFileClick() {
             return;
         }
 
-        // テキスト変更チェック & 保存ダイアログ表示
+        // 1. 【重要】音声再生中であれば、現在の再生セッションを明示的に停止・無効化する
+        playSessionId++; // 現在走っている while ループを即座に破棄するためセッションIDを進める
+        isStopped = true;
+        
+        if (typeof currentAbortController !== 'undefined' && currentAbortController) {
+            currentAbortController.abort();
+        }
+        stopAllAudioPlayers();
+        clearAudioCache();
+
+        // 2. テキスト変更チェック & 保存ダイアログ表示
         await saveFileContent(selectedIndex, textInput.value);
 
-        // 前のファイルへ移動して読み込み
-        playingIndex = selectedIndex;
-        playingIndex--;
+        // 3. 前のファイルへ移動して読み込み
+        playingIndex = selectedIndex - 1;
         const item = playlist[playingIndex];
         filePathDisplay.value = playingIndex;
 
         localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, playingIndex);
-        loadFileContent(item.path, item.content);
+        
+        // ファイル内容の読み込み完了を待つ
+        await loadFileContent(item.path, item.content);
         renderPlaylistUI();
 
-        // 再生中の場合は前ファイルを再生
+        // 4. 元々再生中だった場合は、前ファイルの内容で最初から再生を開始する
         if (isPlaying) {
-            playLineByLine();
+            isStopped = false;
+            playLineByLine(true);
         }
     });
 }
@@ -1812,22 +1824,35 @@ function registerBtnNextFileClick() {
             return;
         }
 
-        // テキスト変更チェック & 保存ダイアログ表示
+        // 1. 【重要】音声再生中であれば、現在の再生セッションを明示的に停止・無効化する
+        playSessionId++; // 現在走っている while ループを即座に破棄するためセッションIDを進める
+        isStopped = true;
+        
+        if (typeof currentAbortController !== 'undefined' && currentAbortController) {
+            currentAbortController.abort();
+        }
+        stopAllAudioPlayers();
+        clearAudioCache();
+
+        // 2. テキスト変更チェック & 保存ダイアログ表示
         await saveFileContent(selectedIndex, textInput.value);
 
-        // 次のファイルへ移動して読み込み
-        playingIndex = selectedIndex;
-        playingIndex++;
+        // 3. 次のファイルへ移動して読み込み
+        playingIndex = selectedIndex + 1; // 簡潔にインクリメント
         const item = playlist[playingIndex];
         filePathDisplay.value = playingIndex;
 
         localStorageSetItemAndFile(STORAGE_KEYS.PLAYLIST_INDEX, playingIndex);
-        loadFileContent(item.path, item.content);
+        
+        // ファイル内容を画面に読み込む（ここで textInput.value が新しいファイルの内容に切り替わる）
+        await loadFileContent(item.path, item.content);
         renderPlaylistUI();
 
-        // 再生中の場合は次ファイルを再生
+        // 4. 元々再生中だった場合は、新しいファイルの内容で最初から再生を開始する
         if (isPlaying) {
-            playLineByLine();
+            // 少しだけ状態をリセットしてから新しく再生を開始
+            isStopped = false;
+            playLineByLine(true);
         }
     });
 }
