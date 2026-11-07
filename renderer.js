@@ -1,7 +1,7 @@
 // -- renderer.js ------------------------------------------------------
 // copyright = 'Copyright © 2026- @x-builder, Japan';
 // email     = 'x-builder@gmail.com';
-// appName   = 'xVoice -テキスト音声読み上げ- Ver2.12.0';
+// appName   = 'xVoice -テキスト音声読み上げ- Ver2.13.0';
 // ---------------------------------------------------------------------
 // 🔲イミディエイト定義🔲
 const DEFAULT_HOST = 'http://127.0.0.1:10101';
@@ -2327,12 +2327,12 @@ function updateButtonStates(playing) {
         if (playing) {
             btnSpeak.textContent = '⏸️';
             btnSpeak.setAttribute('data-tooltip','停止 (Ctrl+p)');
-            btnSpeak.classList.add('play-active')
+            btnSpeak.classList.remove('play-active');
             textInput.style.cursor = 'pointer';
         } else {
             btnSpeak.textContent = '▶️';
             btnSpeak.setAttribute('data-tooltip','再生 (Ctrl+p)');
-            btnSpeak.classList.remove('play-active');
+            btnSpeak.classList.add('play-active');
             textInput.style.cursor = 'text';
         }
         btnSpeak.disabled = !isEngineReady || isPlayingSpeakerPreview;
